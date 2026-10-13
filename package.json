@@ -1,0 +1,33 @@
+{
+  "name": "2026.2-t01-_g6_projetostreamingvideo_subequipe02_codigo",
+  "version": "1.0.0",
+  "description": "Código-fonte da SubEquipe 02 - Projeto Streaming de Vídeo (UnB ArqDsw 2026.2)",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "demo": "tsx src/demo/historia-completa.ts",
+    "coverage": "jest --coverage",
+    "typecheck": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UnBArqDsw2026-2-Turma01/2026.2-T01-_G6_ProjetoStreamingVideo_SubEquipe02_Codigo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/UnBArqDsw2026-2-Turma01/2026.2-T01-_G6_ProjetoStreamingVideo_SubEquipe02_Codigo/issues"
+  },
+  "homepage": "https://github.com/UnBArqDsw2026-2-Turma01/2026.2-T01-_G6_ProjetoStreamingVideo_SubEquipe02_Codigo#readme",
+  "devDependencies": {
+    "@swc/core": "^1.16.18",
+    "@swc/jest": "^0.2.39",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.6.5",
+    "jest": "^30.5.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
