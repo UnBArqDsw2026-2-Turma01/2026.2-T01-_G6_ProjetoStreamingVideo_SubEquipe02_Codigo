@@ -1,6 +1,5 @@
 import { Dinheiro, ErroDominio } from "../../src/dominio";
 import {
-  ComConversaoMoeda,
   ComDesconto,
   ComImposto,
   ComTaxaFixa,
@@ -39,24 +38,11 @@ describe("Decorator do preço", () => {
     expect(taxaAntesDoDesconto.calcular().centavos).toBe(1890); // 21,00 − 10%
   });
 
-  test("conversão de moeda como última camada", () => {
-    const preco = new ComConversaoMoeda(new ComImposto(new PrecoPacote(pacote300), 5), 0.2, "USD");
-    const valor = preco.calcular();
-    expect(valor.moeda).toBe("USD");
-    expect(valor.centavos).toBe(420); // 21,00 × 0,2
-  });
-
-  test("taxa em reais depois da conversão falha por moedas incompatíveis", () => {
-    const convertido = new ComConversaoMoeda(new PrecoPacote(pacote300), 0.2, "USD");
-    expect(() => new ComTaxaFixa(convertido, Dinheiro.deReais(1)).calcular()).toThrow(ErroDominio);
-  });
-
   test("parâmetros inválidos são rejeitados na construção", () => {
     const base = new PrecoPacote(pacote300);
     expect(() => new ComDesconto(base, 0)).toThrow(ErroDominio);
     expect(() => new ComDesconto(base, 100)).toThrow(ErroDominio);
     expect(() => new ComImposto(base, -1)).toThrow(ErroDominio);
     expect(() => new ComTaxaFixa(base, Dinheiro.zero())).toThrow(ErroDominio);
-    expect(() => new ComConversaoMoeda(base, 0, "USD")).toThrow(ErroDominio);
   });
 });

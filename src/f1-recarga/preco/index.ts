@@ -4,4 +4,3 @@ export { PrecoDecorator } from "./PrecoDecorator";
 export { ComDesconto } from "./ComDesconto";
 export { ComTaxaFixa } from "./ComTaxaFixa";
 export { ComImposto } from "./ComImposto";
-export { ComConversaoMoeda } from "./ComConversaoMoeda";

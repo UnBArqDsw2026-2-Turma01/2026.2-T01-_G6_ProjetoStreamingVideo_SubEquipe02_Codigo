@@ -26,18 +26,17 @@ describe("ServicoRecarga", () => {
       expect(oferta!.precoPromocional.igual(oferta!.precoOriginal)).toBe(true);
     });
 
-    test("monta as camadas na ordem desconto → taxa → imposto → conversão", () => {
+    test("monta as camadas na ordem desconto → taxa → imposto", () => {
       const { servico } = criarCenario({
         descontoPercentual: 10,
         taxaFixa: Dinheiro.deReais(1),
         aliquotaImposto: 5,
-        conversao: { taxaCambio: 0.2, moedaDestino: "USD" },
       });
       const preco = servico.montarPreco(pacotes[0]!);
-      // ((20,00 − 10%) + 1,00) × 1,05 = 19,95 → × 0,2 = 3,99 USD
-      expect(preco.calcular().centavos).toBe(399);
-      expect(preco.calcular().moeda).toBe("USD");
-      expect(preco.descrever()).toContain("desconto de 10% → taxa de R$ 1,00 → imposto de 5% → conversão para USD");
+      // ((20,00 − 10%) + 1,00) × 1,05 = 19,95
+      expect(preco.calcular().centavos).toBe(1995);
+      expect(preco.calcular().moeda).toBe("BRL");
+      expect(preco.descrever()).toBe("pacote de 300 (R$ 20,00) → desconto de 10% → taxa de R$ 1,00 → imposto de 5%");
     });
   });
 

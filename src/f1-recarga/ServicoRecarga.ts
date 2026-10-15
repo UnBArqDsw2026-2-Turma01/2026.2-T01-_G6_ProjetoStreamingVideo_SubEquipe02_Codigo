@@ -3,15 +3,14 @@ import { ErroDominio, type Dinheiro, type Usuario } from "../dominio";
 import type { ServicoFinanceiro } from "../financeiro";
 import type { OfertaPacote, Pacote } from "./Pacote";
 import { ErroGatewayIndisponivel, type GatewayPagamento, type SessaoCheckout } from "./pagamento";
-import { ComConversaoMoeda, ComDesconto, ComImposto, ComTaxaFixa, PrecoPacote, type Preco } from "./preco";
+import { ComDesconto, ComImposto, ComTaxaFixa, PrecoPacote, type Preco } from "./preco";
 import { MetodoRecarga, Recarga } from "./Recarga";
 
-/** Regras de preço ativas (parâmetros de configuração, Entrega 2). Todas opcionais. */
+/** Regras de preço ativas (parâmetros de configuração, Entrega 2). Todas opcionais; tudo em reais. */
 export interface ConfiguracaoPreco {
   readonly descontoPercentual?: number;
   readonly taxaFixa?: Dinheiro;
   readonly aliquotaImposto?: number;
-  readonly conversao?: { readonly taxaCambio: number; readonly moedaDestino: string };
 }
 
 /**
@@ -51,7 +50,7 @@ export class ServicoRecarga {
   /**
    * Ofertas do modal de recarga: preço original (componente base) e
    * promocional (cadeia completa). O usuário fica no contrato para regras
-   * futuras por espectador (ex.: moeda do país); hoje as regras são globais.
+   * futuras por espectador; hoje as regras são globais.
    */
   consultarOfertas(_usuario: Usuario): OfertaPacote[] {
     return this.pacotes.map((pacote) => {
@@ -67,16 +66,15 @@ export class ServicoRecarga {
 
   /**
    * Monta a cadeia de decoradores em ordem fixa:
-   * desconto → taxa fixa → imposto → conversão de moeda.
+   * desconto → taxa fixa → imposto.
    * O tipo `Preco` não impede ordens inválidas; quem garante a ordem é este método.
    */
   montarPreco(pacote: Pacote): Preco {
-    const { descontoPercentual, taxaFixa, aliquotaImposto, conversao } = this.configuracaoPreco;
+    const { descontoPercentual, taxaFixa, aliquotaImposto } = this.configuracaoPreco;
     let preco: Preco = new PrecoPacote(pacote);
     if (descontoPercentual !== undefined) preco = new ComDesconto(preco, descontoPercentual);
     if (taxaFixa !== undefined) preco = new ComTaxaFixa(preco, taxaFixa);
     if (aliquotaImposto !== undefined) preco = new ComImposto(preco, aliquotaImposto);
-    if (conversao !== undefined) preco = new ComConversaoMoeda(preco, conversao.taxaCambio, conversao.moedaDestino);
     return preco;
   }
 
