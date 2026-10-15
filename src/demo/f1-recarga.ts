@@ -7,7 +7,7 @@
  * Executar sozinha: npx tsx src/demo/f1-recarga.ts
  */
 import { RepositorioEmMemoria } from "../compartilhado";
-import { Dinheiro, Usuario } from "../dominio";
+import { Usuario } from "../dominio";
 import { ServicoFinanceiro } from "../financeiro";
 import {
   AdaptadorProcessadorSimulado,
@@ -16,20 +16,15 @@ import {
   assinarNotificacao,
   montarRecarga,
   type NotificacaoPagamento,
-  type Pacote,
 } from "../f1-recarga";
 
-const PACOTES: Pacote[] = [
-  { id: "p300", quantidadeMoedaVirtual: 300, valorBase: Dinheiro.deReais(20) },
-  { id: "p1000", quantidadeMoedaVirtual: 1000, valorBase: Dinheiro.deReais(60) },
-];
 
 function aviso(segredo: string, idEvento: string, idPagamento: string, recargaId: string): NotificacaoPagamento {
   const dados = { idEvento, idPagamento, recargaId };
   return { ...dados, assinatura: assinarNotificacao(segredo, dados) };
 }
 
-/** Executa a recarga de 300 de moeda virtual para o espectador, narrando cada padrão. */
+/** Executa a recarga do pacote de R$ 10 (210 de moeda virtual) para o espectador, narrando cada padrão. */
 export async function demonstrarRecarga(espectador: Usuario, financeiro: ServicoFinanceiro): Promise<void> {
   const usuarios = new RepositorioEmMemoria<Usuario>();
   usuarios.salvar(espectador);
@@ -41,8 +36,6 @@ export async function demonstrarRecarga(espectador: Usuario, financeiro: Servico
   const gatewayB = new AdaptadorProcessadorSimulado(processadorB, "segredo-b", "Simulado-B");
 
   const { controller } = montarRecarga({
-    pacotes: PACOTES,
-    configuracaoPreco: { descontoPercentual: 29, aliquotaImposto: 5 },
     gateways: [gatewayA, gatewayB],
     financeiro,
     usuarios,
@@ -56,9 +49,9 @@ export async function demonstrarRecarga(espectador: Usuario, financeiro: Servico
     console.log(`      composição: ${oferta.composicao}`);
   }
 
-  console.log("\n  [Adapter] Espectador compra o pacote de 300 pelo processador externo:");
+  console.log("\n  [Adapter] Espectador compra o pacote de R$ 10 pelo processador externo:");
   console.log("    Simulado-A está fora do ar.");
-  const recarga = await controller.recarregar(espectador.id, "p300", MetodoRecarga.PROCESSADOR_EXTERNO);
+  const recarga = await controller.recarregar(espectador.id, "p10", MetodoRecarga.PROCESSADOR_EXTERNO);
   console.log(
     `    ${recarga.id} ${recarga.status}: ${recarga.valor.formatar()} no ${recarga.gatewayUtilizado} (${recarga.instrucoesPagamento})`,
   );
