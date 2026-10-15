@@ -2,43 +2,91 @@
  * Implementações falsas dos SDKs externos (Adaptees), no formato das APIs reais.
  * Permitem testar os adaptadores sem internet e sem credenciais.
  */
-import type { MPRequest, MPResponse, MPStatus, PaymentIntent, SdkMercadoPago, SdkStripe, StripeParams, StripeStatus } from "../../src/f1-recarga";
+import { MPNotFoundError, type Payment, type Preference } from "mercadopago";
+import type { PaymentIntent, SdkMercadoPago, SdkStripe, StripeParams, StripeStatus } from "../../src/f1-recarga";
 
+type PreferenceCreateData = Parameters<Preference["create"]>[0];
+type PreferenceGetData = Parameters<Preference["get"]>[0];
+type PreferenceResponse = Awaited<ReturnType<Preference["create"]>>;
+type PaymentSearch = Awaited<ReturnType<Payment["search"]>>;
+type PagamentoMP = NonNullable<PaymentSearch["results"]>[number];
+
+/** Dublê do SDK oficial do Mercado Pago: preferências (Checkout Pro) e pagamentos. */
 export class FakeSdkMercadoPago implements SdkMercadoPago {
-  readonly pagamentos = new Map<number, MPResponse>();
-  readonly requisicoes: MPRequest[] = [];
-  /** Erro a lançar na próxima chamada (ex.: { status: 503 } ou { code: "ETIMEDOUT" }). */
-  proximoErro?: object;
-  private sequencia = 1000;
+  readonly preferencias = new Map<string, PreferenceResponse>();
+  readonly pagamentos: PagamentoMP[] = [];
+  readonly requisicoes: PreferenceCreateData["body"][] = [];
+  /** Erro a lançar na próxima chamada (ex.: new MPServerError({...}) ou new MPConnectionError(...)). */
+  proximoErro?: unknown;
+  private sequencia = 0;
+  /** Relógio do dublê, em ms; cada criação avança 1 s. */
+  private agora = Date.parse("2026-10-15T12:00:00.000Z");
 
-  async paymentCreate(body: MPRequest): Promise<MPResponse> {
-    this.lancarSePreciso();
-    this.requisicoes.push(body);
-    const id = ++this.sequencia;
-    const resposta: MPResponse = {
-      id,
-      status: "pending",
-      transaction_amount: body.transaction_amount,
+  readonly preference = {
+    create: async ({ body }: PreferenceCreateData): Promise<PreferenceResponse> => {
+      this.lancarSePreciso();
+      this.requisicoes.push(body);
+      const id = `pref-${++this.sequencia}`;
+      const preferencia = {
+        id,
+        external_reference: body.external_reference,
+        date_created: this.carimbo(),
+        init_point: `https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=${id}`,
+        sandbox_init_point: `https://sandbox.mercadopago.com.br/checkout/v1/redirect?pref_id=${id}`,
+      } as PreferenceResponse;
+      this.preferencias.set(id, preferencia);
+      return preferencia;
+    },
+    get: async ({ preferenceId }: PreferenceGetData): Promise<PreferenceResponse> => {
+      this.lancarSePreciso();
+      const preferencia = this.preferencias.get(preferenceId);
+      if (!preferencia) throw new MPNotFoundError({ status: 404, message: "Preference not found" });
+      return preferencia;
+    },
+  };
+
+  readonly payment = {
+    get: async (): Promise<never> => {
+      throw new Error("não usado pelo adaptador");
+    },
+    search: async ({ options }: { options?: { external_reference?: string } } = {}): Promise<PaymentSearch> => {
+      this.lancarSePreciso();
+      const results = this.pagamentos
+        .filter((p) => p.external_reference === options?.external_reference)
+        .reverse(); // mais recente primeiro
+      return { results } as PaymentSearch;
+    },
+  } as unknown as SdkMercadoPago["payment"];
+
+  /** Simula o espectador pagando no link da preferência. */
+  pagar(idPreferencia: string, status: string, valorPago?: number): void {
+    const preferencia = this.preferencias.get(idPreferencia)!;
+    const item = this.requisicoes.find((r) => r.external_reference === preferencia.external_reference)!.items[0]!;
+    this.pagamentos.push({
+      id: String(9000 + this.pagamentos.length),
+      status,
+      external_reference: preferencia.external_reference,
+      transaction_amount: valorPago ?? item.unit_price,
       currency_id: "BRL",
-      external_reference: body.external_reference,
-      point_of_interaction: { transaction_data: { qr_code: `pix-copia-e-cola-${id}` } },
-    };
-    this.pagamentos.set(id, resposta);
-    return { ...resposta };
+      date_created: this.carimbo(),
+    });
   }
 
-  async paymentGet(id: string): Promise<MPResponse> {
-    this.lancarSePreciso();
-    const pagamento = this.pagamentos.get(Number(id));
-    if (!pagamento) throw { status: 404, message: "Payment not found" };
-    return { ...pagamento };
+  /** Simula um pagamento antigo, de antes de qualquer preferência atual, com a mesma referência. */
+  pagamentoAntigo(externalReference: string, status: string, valor: number): void {
+    this.pagamentos.push({
+      id: String(8000 + this.pagamentos.length),
+      status,
+      external_reference: externalReference,
+      transaction_amount: valor,
+      currency_id: "BRL",
+      date_created: "2020-01-01T00:00:00.000Z",
+    });
   }
 
-  /** Simula o espectador pagando (ou o processador mudando o status). */
-  definirStatus(id: string, status: MPStatus, valorPago?: number): void {
-    const pagamento = this.pagamentos.get(Number(id))!;
-    pagamento.status = status;
-    if (valorPago !== undefined) pagamento.transaction_amount = valorPago;
+  private carimbo(): string {
+    this.agora += 1000;
+    return new Date(this.agora).toISOString();
   }
 
   private lancarSePreciso(): void {
