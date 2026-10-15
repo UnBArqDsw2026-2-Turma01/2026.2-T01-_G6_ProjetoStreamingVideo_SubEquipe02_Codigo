@@ -1,0 +1,87 @@
+/**
+ * Demonstração da F1 · Recarga de moeda virtual (Decorator, Adapter e Proxy).
+ *
+ * Usa dois processadores simulados, para rodar sem internet e sem credenciais:
+ * o primeiro está fora do ar, para mostrar o fallback (O07).
+ *
+ * Executar sozinha: npx tsx src/demo/f1-recarga.ts
+ */
+import { RepositorioEmMemoria } from "../compartilhado";
+import { Dinheiro, Usuario } from "../dominio";
+import { ServicoFinanceiro } from "../financeiro";
+import {
+  AdaptadorProcessadorSimulado,
+  MetodoRecarga,
+  ProcessadorSimulado,
+  assinarNotificacao,
+  montarRecarga,
+  type NotificacaoPagamento,
+  type Pacote,
+} from "../f1-recarga";
+
+const PACOTES: Pacote[] = [
+  { id: "p300", quantidadeMoedaVirtual: 300, valorBase: Dinheiro.deReais(20) },
+  { id: "p1000", quantidadeMoedaVirtual: 1000, valorBase: Dinheiro.deReais(60) },
+];
+
+function aviso(segredo: string, idEvento: string, idPagamento: string, recargaId: string): NotificacaoPagamento {
+  const dados = { idEvento, idPagamento, recargaId };
+  return { ...dados, assinatura: assinarNotificacao(segredo, dados) };
+}
+
+/** Executa a recarga de 300 de moeda virtual para o espectador, narrando cada padrão. */
+export async function demonstrarRecarga(espectador: Usuario, financeiro: ServicoFinanceiro): Promise<void> {
+  const usuarios = new RepositorioEmMemoria<Usuario>();
+  usuarios.salvar(espectador);
+
+  const processadorA = new ProcessadorSimulado();
+  const processadorB = new ProcessadorSimulado();
+  processadorA.online = false;
+  const gatewayA = new AdaptadorProcessadorSimulado(processadorA, "segredo-a", "Simulado-A");
+  const gatewayB = new AdaptadorProcessadorSimulado(processadorB, "segredo-b", "Simulado-B");
+
+  const { controller } = montarRecarga({
+    pacotes: PACOTES,
+    configuracaoPreco: { descontoPercentual: 29, aliquotaImposto: 5 },
+    gateways: [gatewayA, gatewayB],
+    financeiro,
+    usuarios,
+  });
+
+  console.log("  [Decorator] Modal de moeda virtual:");
+  for (const oferta of controller.consultarOfertas(espectador.id)) {
+    console.log(
+      `    ${oferta.pacote.quantidadeMoedaVirtual} de moeda virtual: de ${oferta.precoOriginal.formatar()} por ${oferta.precoPromocional.formatar()}`,
+    );
+    console.log(`      composição: ${oferta.composicao}`);
+  }
+
+  console.log("\n  [Adapter] Espectador compra o pacote de 300 pelo processador externo:");
+  console.log("    Simulado-A está fora do ar.");
+  const recarga = await controller.recarregar(espectador.id, "p300", MetodoRecarga.PROCESSADOR_EXTERNO);
+  console.log(
+    `    ${recarga.id} ${recarga.status}: ${recarga.valor.formatar()} no ${recarga.gatewayUtilizado} (${recarga.instrucoesPagamento})`,
+  );
+
+  const idPagamento = recarga.idCheckout!;
+  console.log("\n  [Proxy] Avisos de pagamento recebidos pelo webhook do Simulado-B:");
+  const casos: [string, NotificacaoPagamento, (() => void)?][] = [
+    ["aviso falsificado (O14)", aviso("segredo-do-atacante", "ev-0", idPagamento, recarga.id)],
+    ["aviso antes do pagamento", aviso("segredo-b", "ev-1", idPagamento, recarga.id)],
+    ["aviso após o pagamento", aviso("segredo-b", "ev-2", idPagamento, recarga.id), () => processadorB.aprovar(idPagamento)],
+    ["reenvio do mesmo aviso (O11)", aviso("segredo-b", "ev-3", idPagamento, recarga.id)],
+  ];
+  for (const [descricao, notificacao, antes] of casos) {
+    antes?.();
+    const resultado = await controller.receberWebhook("Simulado-B", notificacao);
+    console.log(`    ${descricao}: ${resultado.efeito} (${resultado.motivo})`);
+  }
+}
+
+if (require.main === module) {
+  const espectador = new Usuario("usuario-1", "Espectador", "espectador@exemplo.com");
+  console.log("=== F1 · Recarga de moeda virtual ===\n");
+  demonstrarRecarga(espectador, new ServicoFinanceiro()).then(() => {
+    console.log(`\nSaldo final: ${espectador.carteira.saldoMoedaVirtual} de moeda virtual`);
+  });
+}
