@@ -50,4 +50,34 @@ describe("ServicoFinanceiro", () => {
     financeiro.creditarMoedaVirtual(doador, 50);
     expect(financeiro.consultarSaldos(doador).moedaVirtual).toBe(50);
   });
+  describe("recarregarComSaldo", () => {
+    test("debita o dinheiro e credita a moeda virtual", () => {
+      const { criador } = criarUsuarios();
+      criador.carteira.adicionarDinheiro(Dinheiro.deReais(50));
+
+      const ok = new ServicoFinanceiro().recarregarComSaldo(criador, Dinheiro.deReais(14.91), 300);
+
+      expect(ok).toBe(true);
+      expect(criador.carteira.saldoDinheiro.centavos).toBe(5000 - 1491);
+      expect(criador.carteira.saldoMoedaVirtual).toBe(300);
+    });
+
+    test("recusa sem saldo em dinheiro, sem alterar a carteira", () => {
+      const { criador } = criarUsuarios();
+      const ok = new ServicoFinanceiro().recarregarComSaldo(criador, Dinheiro.deReais(14.91), 300);
+      expect(ok).toBe(false);
+      expect(criador.carteira.saldoMoedaVirtual).toBe(0);
+      expect(criador.carteira.saldoDinheiro.ehZero()).toBe(true);
+    });
+
+    test("devolve o dinheiro se o crédito da moeda virtual falhar", () => {
+      const { criador } = criarUsuarios();
+      criador.carteira.adicionarDinheiro(Dinheiro.deReais(50));
+
+      expect(() =>
+        new ServicoFinanceiro().recarregarComSaldo(criador, Dinheiro.deReais(10), 0),
+      ).toThrow();
+      expect(criador.carteira.saldoDinheiro.centavos).toBe(5000);
+    });
+  });
 });
