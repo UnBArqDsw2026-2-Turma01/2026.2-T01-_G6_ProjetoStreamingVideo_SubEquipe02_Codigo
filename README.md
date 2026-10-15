@@ -14,7 +14,8 @@ Organizada como uma história de uso da plataforma:
 
 ```bash
 npm install
-npm run demo         # história completa no terminal
+npm run demo         # história completa no terminal (processadores simulados, sem internet)
+npm run demo:mp      # F1 com o Mercado Pago real, em conta de teste (ver abaixo)
 npm test             # testes
 npm run coverage     # relatório de cobertura
 npm run typecheck    # checagem estática de tipos (tsc)
@@ -32,7 +33,7 @@ npm run typecheck    # checagem estática de tipos (tsc)
 | `src/financeiro` | `ServicoFinanceiro`: única porta para movimentar saldos | Base |
 | `src/compartilhado` | `RepositorioEmMemoria` e `GeradorId` | Base |
 | `src/contratos` | `NotificadorChat`: contrato entre F2 e F3 | Base |
-| `src/f1-recarga` | Adapter, Proxy e Decorator do preço | F1 |
+| `src/f1-recarga` | Catálogo de pacotes, Decorator do preço, Adapter dos gateways e Proxy da confirmação | F1 |
 | `src/f2-doacao` | Facade e Proxy do repasse | F2 |
 | `src/f3-chat` | Decorator da mensagem destacada | F3 |
 | `src/demo` | Demonstrações executáveis (história completa) | Todos |
@@ -45,10 +46,10 @@ npm run typecheck    # checagem estática de tipos (tsc)
 │   ├── contratos/        # Interfaces e contratos entre frentes (ex: NotificadorChat)
 │   ├── dominio/          # Classes e entidades compartilhadas (Dinheiro, Carteira, etc.)
 │   ├── financeiro/       # Serviço financeiro (movimentação de saldos e transações)
-│   ├── f1-recarga/       # Adapter, Proxy e Decorator do preço (Frente 1)
+│   ├── f1-recarga/       # Catálogo, Decorator do preço, Adapter e Proxy (Frente 1)
 │   ├── f2-doacao/        # Facade e Proxy do repasse (Frente 2)
 │   ├── f3-chat/          # Decorator da mensagem destacada (Frente 3)
-│   └── demo/             # Demonstrações executáveis (história completa)
+│   └── demo/             # Demonstrações executáveis (história completa e F1 com Mercado Pago)
 ├── tests/
 │   ├── configuracao.test.ts # Teste de verificação do ambiente
 │   ├── compartilhado/       # Testes utilitários compartilhados
@@ -97,9 +98,39 @@ import type { NotificadorChat } from "../contratos";
 
 | Frente | Etapa | Padrões GoF | Responsável(is) |
 | -- | -- | -- | -- |
-| **F1** | Recarga | **Adapter** (meios de pagamento distintos, fallback O07) · **Proxy** (confirmação idempotente e segura O11, O14) · **Decorator** (preço: desconto, imposto RN01) | Davi Severiano |
+| **F1** | Recarga | **Adapter** (meios de pagamento distintos, fallback O07) · **Proxy** (confirmação idempotente e segura O11, O14) · **Decorator** (preço: desconto, taxa fixa, imposto RN01) | Davi Severiano |
 | **F2** | Doação e Repasse | **Facade** (coordena carteira, chat e repasse) · **Proxy** (impedir repasse duplicado O11) | Daniel Lira e Pedro Rodrigues |
 | **F3** | Mensagem destacada | **Decorator** (camadas visuais: cor de faixa, fixação, emblema SC01, SC02) | Mateus Barreto |
+
+---
+
+## F1 · Recarga de moeda virtual
+
+| Pasta | Padrão | Conteúdo |
+| -- | -- | -- |
+| `f1-recarga/catalogo.ts` | — | Pacotes e promoção vigente da plataforma |
+| `f1-recarga/preco` | **Decorator** | `PrecoPacote` + `ComDesconto` → `ComTaxaFixa` → `ComImposto` |
+| `f1-recarga/pagamento` | **Adapter** | `GatewayPagamento` com `AdaptadorMercadoPago`, `AdaptadorStripe` e `AdaptadorProcessadorSimulado` |
+| `f1-recarga/confirmacao` | **Proxy** | `ProxyConfirmacaoSegura` (assinatura O14, duplicidade O11) diante do `ServicoConfirmacao` |
+
+- **Catálogo único:** os pacotes (20 de moeda virtual por R$ 1, com bônus progressivo de 0% a 40%) e a promoção (29% de desconto, 5% de imposto) pertencem ao sistema e valem para **todos** os meios de pagamento. Os gateways recebem só o valor final; nunca conhecem pacotes nem moeda virtual.
+- **Só reais:** toda a recarga opera em BRL; não há conversão de moeda.
+- **Mercado Pago (Checkout Pro):** o `AdaptadorMercadoPago` adapta direto o SDK oficial (`mercadopago`). O `idCheckout` é o id da preferência; a consulta encontra o pagamento pela `external_reference` (id da recarga).
+
+### Rodando com o Mercado Pago (conta de teste)
+
+1. No [painel de desenvolvedores](https://www.mercadopago.com.br/developers/panel/test-users), crie dois usuários de teste: um **vendedor** e um **comprador**.
+2. Entre com o vendedor de teste, crie uma aplicação e copie o *access token* de produção **dele**.
+3. Crie um `.env` na raiz (ele é ignorado pelo git):
+
+   ```bash
+   MERCADO_PAGO_ACCESS_TOKEN=APP_USR-...   # token do vendedor de TESTE
+   MERCADO_PAGO_WEBHOOK_SECRET=um-segredo-local
+   ```
+
+4. Rode `npm run demo:mp`, abra o link em aba anônima e pague logado com o **comprador de teste**. O demo detecta a aprovação, passa o aviso pelo Proxy e credita as moedas.
+
+> O demo recusa tokens da sua conta real, que gerariam cobrança de verdade (para forçar: `MERCADO_PAGO_PERMITIR_PRODUCAO=1`). O webhook ainda é simulado localmente depois que a aprovação é detectada por consulta.
 
 ---
 
@@ -138,6 +169,7 @@ Relatório da SubEquipe_02: *link a inserir*.
 - **Runtime:** [Node.js](https://nodejs.org/) (>= 18)
 - **Testes:** [Jest](https://jestjs.io/) com [@swc/jest](https://swc.rs/)
 - **Execução Direta:** [tsx](https://github.com/privatenumber/tsx)
+- **Pagamentos (F1):** [SDK oficial do Mercado Pago](https://github.com/mercadopago/sdk-nodejs) (`mercadopago` v3)
 
 ---
 
