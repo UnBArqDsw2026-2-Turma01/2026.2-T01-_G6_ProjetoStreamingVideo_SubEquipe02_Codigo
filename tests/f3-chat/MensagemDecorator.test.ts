@@ -65,10 +65,10 @@ describe("ComLimiteCaracteres", () => {
     expect(mensagem.texto()).toBe("12345");
   });
 
-  test("corta o texto que passa do limite, terminando em reticências", () => {
+  test("recusa o texto que passa do limite, dizendo o tamanho e o limite", () => {
     const mensagem = new ComLimiteCaracteres(base("1234567890"), 5);
-    expect(mensagem.texto()).toBe("1234…");
-    expect(Array.from(mensagem.texto())).toHaveLength(5);
+    expect(() => mensagem.texto()).toThrow(ErroDominio);
+    expect(() => mensagem.texto()).toThrow("tem 10 caracteres e excede o limite de 5");
   });
 
   test("conta emojis como um caractere", () => {
@@ -76,9 +76,10 @@ describe("ComLimiteCaracteres", () => {
     expect(mensagem.texto()).toBe("🎉🎉🎉");
   });
 
-  test("não altera o cabeçalho", () => {
-    const mensagem = new ComLimiteCaracteres(base("texto bem comprido"), 4);
+  test("o limite vale só para o texto, não para o cabeçalho", () => {
+    const mensagem = new ComLimiteCaracteres(base("curto"), 5);
     expect(mensagem.cabecalho()).toBe("Espectador · 2000 de moeda virtual");
+    expect(mensagem.texto()).toBe("curto");
   });
 
   test("recusa limite inválido", () => {
@@ -88,7 +89,7 @@ describe("ComLimiteCaracteres", () => {
 
 describe("Empilhamento das camadas (Decorator)", () => {
   test("as camadas se combinam e cada uma mexe só na sua parte", () => {
-    let mensagem: MensagemDestacada = base("Mensagem longa demais para a faixa");
+    let mensagem: MensagemDestacada = base("Valeu!");
     mensagem = new ComLimiteCaracteres(mensagem, 10);
     mensagem = new ComFaixaCor(mensagem, "LARANJA");
     mensagem = new ComFixacao(mensagem, 10);
@@ -96,7 +97,7 @@ describe("Empilhamento das camadas (Decorator)", () => {
     expect(mensagem.cabecalho()).toBe(
       "[LARANJA] Espectador · 2000 de moeda virtual · fixada por 10 min",
     );
-    expect(mensagem.texto()).toBe("Mensagem …");
+    expect(mensagem.texto()).toBe("Valeu!");
     expect(mensagem.tempoFixacaoMin()).toBe(10);
     expect(mensagem.descrever()).toBe(
       "mensagem → limite de 10 caracteres → cor LARANJA → fixação de 10 min",

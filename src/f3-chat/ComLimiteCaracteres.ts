@@ -6,8 +6,8 @@ import { MensagemDecorator } from "./MensagemDecorator";
  * ConcreteDecorator: garante, na exibição, o limite de caracteres da faixa (SC02).
  *
  * A F2 já recusa doações com mensagem acima do limite; esta camada é a defesa do
- * próprio chat, que não depende de quem o chama para exibir dentro do limite.
- * Corta apenas o corpo da mensagem, nunca o cabeçalho.
+ * próprio chat: uma mensagem acima do limite não é exibida, e o erro sobe para quem
+ * pediu a exibição. O limite vale só para o corpo da mensagem, nunca para o cabeçalho.
  */
 export class ComLimiteCaracteres extends MensagemDecorator {
   private readonly limite: number;
@@ -21,12 +21,15 @@ export class ComLimiteCaracteres extends MensagemDecorator {
   }
 
   override texto(): string {
+    const texto = this.interna.texto();
     // Array.from conta caracteres reais, inclusive emojis, e não unidades UTF-16.
-    const caracteres = Array.from(this.interna.texto());
-    if (caracteres.length <= this.limite) {
-      return caracteres.join("");
+    const tamanho = Array.from(texto).length;
+    if (tamanho > this.limite) {
+      throw new ErroDominio(
+        `A mensagem tem ${tamanho} caracteres e excede o limite de ${this.limite} da faixa (SC02).`,
+      );
     }
-    return `${caracteres.slice(0, this.limite - 1).join("")}…`;
+    return texto;
   }
 
   override descrever(): string {

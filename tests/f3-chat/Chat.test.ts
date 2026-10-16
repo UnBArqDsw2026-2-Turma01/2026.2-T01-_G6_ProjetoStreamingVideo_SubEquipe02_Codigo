@@ -52,13 +52,14 @@ describe("Chat (Client do Decorator)", () => {
     expect(mensagem.cabecalho()).not.toContain("fixada");
   });
 
-  test("corta no chat uma mensagem acima do limite da faixa", () => {
-    const { chat } = chatSilencioso();
-    chat.exibirMensagemDestacada(doacao(200, "a".repeat(80)));
-    const [mensagem] = chat.mensagensExibidas();
+  test("recusa uma mensagem acima do limite da faixa, sem exibir nada pela metade", () => {
+    const { chat, linhas } = chatSilencioso();
 
-    expect(Array.from(mensagem.texto())).toHaveLength(50);
-    expect(mensagem.texto().endsWith("…")).toBe(true);
+    expect(() => chat.exibirMensagemDestacada(doacao(200, "a".repeat(80)))).toThrow(
+      "excede o limite de 50",
+    );
+    expect(linhas).toHaveLength(0);
+    expect(chat.mensagensExibidas()).toHaveLength(0);
   });
 
   test("guarda o histórico na ordem de chegada, sem expor a lista interna", () => {

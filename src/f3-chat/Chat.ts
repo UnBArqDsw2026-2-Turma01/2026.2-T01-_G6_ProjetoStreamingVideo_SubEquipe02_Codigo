@@ -27,9 +27,11 @@ export class Chat implements NotificadorChat {
 
   exibirMensagemDestacada(doacao: DoacaoNotificada): void {
     const mensagem = this.montarMensagem(doacao);
+    // Monta as duas linhas antes de exibir: se alguma camada recusar a mensagem
+    // (por exemplo, acima do limite de caracteres), nada aparece pela metade.
+    const linhas = [`[chat] ${mensagem.cabecalho()}`, `       "${mensagem.texto()}"`];
     this.historico.push(mensagem);
-    this.saida(`[chat] ${mensagem.cabecalho()}`);
-    this.saida(`       "${mensagem.texto()}"`);
+    linhas.forEach((linha) => this.saida(linha));
   }
 
   /** Mensagens já exibidas, na ordem em que chegaram. */

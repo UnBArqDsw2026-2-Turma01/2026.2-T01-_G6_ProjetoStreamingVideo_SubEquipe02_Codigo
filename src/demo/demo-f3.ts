@@ -3,7 +3,7 @@
  *
  * Cenários demonstrados:
  * 1. Uma doação em cada faixa: a pilha de camadas muda conforme o valor (SC01, SC02);
- * 2. Limite de caracteres aplicado só ao corpo da mensagem (SC02);
+ * 2. Mensagem acima do limite de caracteres da faixa é recusada pelo chat (SC02);
  * 3. Integração com a F2: a doação feita pela Facade aparece destacada no chat,
  *    pelo contrato NotificadorChat, no lugar do chat provisório.
  *
@@ -14,7 +14,7 @@ import type { DoacaoNotificada } from "../contratos";
 import { Usuario } from "../dominio";
 import { ServicoFinanceiro } from "../financeiro";
 import { Doacao, DoacaoController, ServicoDoacao } from "../f2-doacao";
-import { Chat, ComLimiteCaracteres, MensagemBase } from "../f3-chat";
+import { Chat } from "../f3-chat";
 
 /** Executa os cenários da mensagem destacada, mostrando as camadas montadas em cada um. */
 export function demonstrarMensagemDestacada(): void {
@@ -39,13 +39,14 @@ export function demonstrarMensagemDestacada(): void {
     console.log(`         camadas: ${ultima?.descrever()}\n`);
   }
 
-  console.log("  [Limite] O corpo é cortado no limite da faixa; o cabeçalho fica intacto (SC02):");
-  const longa = new ComLimiteCaracteres(
-    new MensagemBase("Espectador", "Esta mensagem tem bem mais do que vinte caracteres", 200),
-    20,
-  );
-  console.log(`    antes:  "Esta mensagem tem bem mais do que vinte caracteres"`);
-  console.log(`    depois: "${longa.texto()}"\n`);
+  console.log("  [Limite] Mensagem acima do limite da faixa é recusada, sem exibir nada (SC02):");
+  const longa = "Mensagem muito comprida para uma doação de 200, passa dos 50 caracteres";
+  console.log(`    FAIXA_1 (limite de 50), mensagem com ${Array.from(longa).length} caracteres`);
+  try {
+    chat.exibirMensagemDestacada(notificar(200, longa));
+  } catch (erro) {
+    console.log(`    recusada: ${erro instanceof Error ? erro.message : String(erro)}\n`);
+  }
 
   console.log("  [Integração] Doação pela Facade da F2, exibida pelo chat da F3:");
   const usuarios = new RepositorioEmMemoria<Usuario>();
