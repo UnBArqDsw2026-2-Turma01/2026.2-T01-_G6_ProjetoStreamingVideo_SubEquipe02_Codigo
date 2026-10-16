@@ -6,6 +6,7 @@
   "scripts": {
     "test": "jest",
     "demo": "tsx src/demo/historia-completa.ts",
+    "demo:f2": "tsx src/demo/demo-f2.ts",
     "coverage": "jest --coverage",
     "typecheck": "tsc"
   },
