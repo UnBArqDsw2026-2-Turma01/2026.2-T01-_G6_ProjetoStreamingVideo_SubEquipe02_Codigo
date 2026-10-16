@@ -2,7 +2,12 @@ import type { GeradorId, RepositorioEmMemoria } from "../compartilhado";
 import { ErroDominio, type Dinheiro, type Usuario } from "../dominio";
 import type { ServicoFinanceiro } from "../financeiro";
 import type { OfertaPacote, Pacote } from "./Pacote";
-import { ErroGatewayIndisponivel, type GatewayPagamento, type SessaoCheckout } from "./pagamento";
+import {
+  ErroGatewayIndisponivel,
+  ErroMeioPagamentoIndisponivel,
+  type GatewayPagamento,
+  type SessaoCheckout,
+} from "./pagamento";
 import { ComDesconto, ComImposto, ComTaxaFixa, PrecoPacote, type Preco } from "./preco";
 import { MetodoRecarga, Recarga } from "./Recarga";
 
@@ -87,7 +92,23 @@ export class ServicoRecarga {
    * - PENDENTE: checkout criado, aguardando o aviso do processador;
    * - CANCELADA: saldo insuficiente ou nenhum gateway disponível (ver `motivoCancelamento`).
    */
-  async processarRecarga(usuario: Usuario, pacote: Pacote, metodo: MetodoRecarga): Promise<Recarga> {
+  /** Nomes dos meios de pagamento externos, na ordem de preferência do sistema, para o modal oferecer. */
+  consultarMeiosPagamento(): string[] {
+    return this.gateways.map((g) => g.nome);
+  }
+
+  /**
+   * Com `gatewayEscolhido`, usa só o meio que o espectador escolheu; se ele estiver
+   * indisponível, lança `ErroMeioPagamentoIndisponivel` com as alternativas.
+   * Sem escolha, o sistema tenta os gateways em ordem (fallback O07).
+   */
+  async processarRecarga(
+    usuario: Usuario,
+    pacote: Pacote,
+    metodo: MetodoRecarga,
+    gatewayEscolhido?: string,
+  ): Promise<Recarga> {
+    const escolhido = gatewayEscolhido === undefined ? undefined : this.buscarGateway(gatewayEscolhido);
     const preco = this.montarPreco(pacote);
     const recarga = new Recarga(
       this.geradorId.proximo("recarga"),
@@ -101,10 +122,18 @@ export class ServicoRecarga {
 
     if (metodo === MetodoRecarga.SALDO_DO_CRIADOR) {
       this.pagarComSaldo(recarga);
+    } else if (escolhido) {
+      await this.iniciarCheckoutNoEscolhido(recarga, escolhido);
     } else {
       await this.iniciarCheckoutComFallback(recarga);
     }
     return recarga;
+  }
+
+  private buscarGateway(nome: string): GatewayPagamento {
+    const gateway = this.gateways.find((g) => g.nome === nome);
+    if (!gateway) throw new ErroDominio(`Meio de pagamento inexistente: ${nome}`);
+    return gateway;
   }
 
   private pagarComSaldo(recarga: Recarga): void {
@@ -115,6 +144,22 @@ export class ServicoRecarga {
     }
     recarga.concluir();
     recarga.usuario.carteira.registrarTransacao(recarga);
+  }
+
+  /** Escolha do espectador: não troca de processador sem perguntar; devolve as alternativas. */
+  private async iniciarCheckoutNoEscolhido(recarga: Recarga, gateway: GatewayPagamento): Promise<void> {
+    try {
+      const sessao = await gateway.iniciarCheckout(recarga.valor, recarga.id);
+      recarga.registrarCheckout(gateway.nome, sessao.idCheckout, sessao.instrucoes);
+    } catch (erro) {
+      if (!(erro instanceof ErroGatewayIndisponivel)) {
+        recarga.cancelarComMotivo(`falha no gateway ${gateway.nome}`);
+        throw erro;
+      }
+      recarga.cancelarComMotivo(`${gateway.nome} indisponível`);
+      const alternativas = this.gateways.filter((g) => g !== gateway).map((g) => g.nome);
+      throw new ErroMeioPagamentoIndisponivel(gateway.nome, alternativas);
+    }
   }
 
   /** Fallback (O07): tenta cada gateway em ordem; só indisponibilidade passa para o próximo. */

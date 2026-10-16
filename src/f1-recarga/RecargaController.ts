@@ -30,10 +30,16 @@ export class RecargaController {
     return this.servico.consultarOfertas(this.buscarUsuario(usuarioId));
   }
 
-  recarregar(usuarioId: string, pacoteId: string, metodo: MetodoRecarga): Promise<Recarga> {
+  /** Meios de pagamento externos que o modal oferece ao espectador. */
+  consultarMeiosPagamento(): string[] {
+    return this.servico.consultarMeiosPagamento();
+  }
+
+  /** `gateway` é o meio escolhido pelo espectador; omitido, o sistema escolhe com fallback (O07). */
+  recarregar(usuarioId: string, pacoteId: string, metodo: MetodoRecarga, gateway?: string): Promise<Recarga> {
     const usuario = this.buscarUsuario(usuarioId);
     const pacote = this.servico.buscarPacote(pacoteId);
-    return this.servico.processarRecarga(usuario, pacote, metodo);
+    return this.servico.processarRecarga(usuario, pacote, metodo, gateway);
   }
 
   async receberWebhook(nomeGateway: string, notificacao: NotificacaoPagamento): Promise<ResultadoConfirmacao> {

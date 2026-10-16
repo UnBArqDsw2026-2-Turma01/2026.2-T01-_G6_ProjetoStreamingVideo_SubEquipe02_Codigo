@@ -8,107 +8,33 @@
  *
  * Executar: npx tsx src/demo/f1-pagamento-real.ts mercadopago|stripe
  */
-import { MercadoPagoConfig, User } from "mercadopago";
-import { existsSync } from "node:fs";
 import { RepositorioEmMemoria } from "../compartilhado";
 import { Usuario } from "../dominio";
 import { ServicoFinanceiro } from "../financeiro";
-import {
-  AdaptadorMercadoPago,
-  AdaptadorStripe,
-  CONFIGURACAO_PRECO,
-  MetodoRecarga,
-  StatusPagamento,
-  assinarNotificacao,
-  montarRecarga,
-  type GatewayPagamento,
-} from "../f1-recarga";
-
-// Carrega automaticamente o arquivo .env se existir
-if (existsSync(".env") && typeof process.loadEnvFile === "function") {
-  process.loadEnvFile(".env");
-}
-
-const PERMITIR_PRODUCAO = process.env.PERMITIR_PRODUCAO === "1";
-
-/** O que muda de um processador para outro; o resto do fluxo é igual para todos. */
-interface ProcessadorReal {
-  readonly titulo: string;
-  readonly comoPagar: string;
-  readonly segredoWebhook: string;
-  /** Confere as credenciais e devolve o gateway, ou encerra explicando o que falta. */
-  conectar(): Promise<GatewayPagamento>;
-}
+import { CONFIGURACAO_PRECO, MetodoRecarga, StatusPagamento, assinarNotificacao, montarRecarga } from "../f1-recarga";
+import { PROCESSADORES_REAIS } from "./processadoresReais";
 
 function falhar(...linhas: string[]): never {
   for (const linha of linhas) console.error(linha);
   process.exit(1);
 }
 
-function avisarModo(teste: boolean, descricaoProducao: string): void {
-  if (!teste && !PERMITIR_PRODUCAO) {
-    falhar(
-      `\n❌ ${descricaoProducao}: o link geraria cobrança de verdade.`,
-      "(Para rodar em produção mesmo assim: PERMITIR_PRODUCAO=1)",
-    );
-  }
-  console.log(teste ? "🧪 Modo teste: nenhum dinheiro real envolvido.\n" : "⚠️  PRODUÇÃO: cobrança real!\n");
-}
-
-const PROCESSADORES: Record<string, ProcessadorReal> = {
-  mercadopago: {
-    titulo: "Mercado Pago (Checkout Pro)",
-    comoPagar: "abra em aba anônima e entre com o COMPRADOR de teste",
-    segredoWebhook: process.env.MERCADO_PAGO_WEBHOOK_SECRET ?? "segredo-local-mp",
-    async conectar() {
-      const token = process.env.MERCADO_PAGO_ACCESS_TOKEN?.trim();
-      if (!token) {
-        falhar(
-          "❌ MERCADO_PAGO_ACCESS_TOKEN não configurado no .env.",
-          "Use o access token do VENDEDOR de teste: https://www.mercadopago.com.br/developers/panel/test-users",
-        );
-      }
-      // Quem decide teste x produção é a conta dona do token: usuários de teste têm apelido TESTUSER...
-      const conta = await new User(new MercadoPagoConfig({ accessToken: token })).get();
-      console.log(`Conta do token: ${conta.nickname} (id ${conta.id})`);
-      const teste = token.startsWith("TEST-") || (conta.nickname ?? "").toUpperCase().startsWith("TESTUSER");
-      avisarModo(teste, "Este token é da sua conta REAL do Mercado Pago (use o do vendedor de teste)");
-      return AdaptadorMercadoPago.conectar(token, this.segredoWebhook);
-    },
-  },
-  stripe: {
-    titulo: "Stripe (Checkout Session)",
-    comoPagar: "cartão 4242 4242 4242 4242, qualquer validade futura e qualquer CVC",
-    segredoWebhook: process.env.STRIPE_WEBHOOK_SECRET ?? "segredo-local-stripe",
-    async conectar() {
-      const chave = process.env.STRIPE_SECRET_KEY?.trim();
-      if (!chave) {
-        falhar(
-          "❌ STRIPE_SECRET_KEY não configurada no .env.",
-          "Use a chave secreta de TESTE (sk_test_...): https://dashboard.stripe.com/test/apikeys",
-        );
-      }
-      // No Stripe, o modo vem na própria chave: sk_test_/rk_test_ são de teste.
-      const teste = /^(sk|rk)_test_/.test(chave);
-      console.log(`Chave do Stripe: ${chave.slice(0, 8)}...`);
-      avisarModo(teste, "Esta é uma chave LIVE do Stripe (use a sk_test_)");
-      return AdaptadorStripe.conectar(chave, this.segredoWebhook);
-    },
-  },
-};
-
 async function executar(): Promise<void> {
   const nome = process.argv[2] ?? "";
-  const processador = PROCESSADORES[nome];
-  if (!processador) {
-    falhar(`Uso: npx tsx src/demo/f1-pagamento-real.ts <${Object.keys(PROCESSADORES).join("|")}>`);
+  const real = PROCESSADORES_REAIS[nome];
+  if (!real) {
+    falhar(`Uso: npx tsx src/demo/f1-pagamento-real.ts <${Object.keys(PROCESSADORES_REAIS).join("|")}>`);
   }
 
   console.log("=========================================================");
-  console.log(`=== F1 · Recarga real com ${processador.titulo}`);
+  console.log(`=== F1 · Recarga real com ${real.titulo}`);
   console.log("=========================================================\n");
 
-  const gateway = await processador.conectar();
+  const processador = await real.conectar();
+  if ("erro" in processador) falhar(`❌ ${processador.erro}`);
+  const { gateway } = processador;
+  console.log(`Credencial: ${processador.descricao}`);
+  console.log(processador.teste ? "🧪 Modo teste: nenhum dinheiro real envolvido.\n" : "⚠️  PRODUÇÃO: cobrança real!\n");
 
   const espectador = new Usuario("usuario-real", "Daví (Espectador)", "davi@exemplo.com");
   const usuarios = new RepositorioEmMemoria<Usuario>();
@@ -127,7 +53,8 @@ async function executar(): Promise<void> {
   }
 
   console.log(`\n2. [Adapter] Criando checkout no ${gateway.nome}...`);
-  const recarga = await controller.recarregar(espectador.id, "p10", MetodoRecarga.PROCESSADOR_EXTERNO);
+  // O espectador escolhe o meio de pagamento no modal.
+  const recarga = await controller.recarregar(espectador.id, "p10", MetodoRecarga.PROCESSADOR_EXTERNO, gateway.nome);
   const idCheckout = recarga.idCheckout!;
 
   console.log(`   ✅ Checkout criado!`);

@@ -1,7 +1,8 @@
 import { GeradorId, RepositorioEmMemoria } from "../../src/compartilhado";
-import { Dinheiro, StatusTransacao } from "../../src/dominio";
+import { Dinheiro, ErroDominio, StatusTransacao } from "../../src/dominio";
 import {
   ErroGatewayIndisponivel,
+  ErroMeioPagamentoIndisponivel,
   MetodoRecarga,
   Recarga,
   ServicoRecarga,
@@ -99,6 +100,40 @@ describe("ServicoRecarga", () => {
         "requisição inválida",
       );
       expect(recargas.listar()[0]!.status).toBe(StatusTransacao.CANCELADA);
+    });
+
+    test("o modal recebe os meios de pagamento na ordem do sistema", () => {
+      const { controller } = criarCenario();
+      expect(controller.consultarMeiosPagamento()).toEqual(["Simulado-A", "Simulado-B"]);
+    });
+
+    test("o espectador escolhe o meio: usa esse, mesmo não sendo o primeiro", async () => {
+      const { controller } = criarCenario();
+      const recarga = await controller.recarregar("usuario-1", "p300", MetodoRecarga.PROCESSADOR_EXTERNO, "Simulado-B");
+
+      expect(recarga.status).toBe(StatusTransacao.PENDENTE);
+      expect(recarga.gatewayUtilizado).toBe("Simulado-B");
+    });
+
+    test("meio escolhido fora do ar: não troca sozinho; cancela e devolve as alternativas", async () => {
+      const { controller, processadorB, recargas } = criarCenario();
+      processadorB.online = false;
+
+      const tentativa = controller.recarregar("usuario-1", "p300", MetodoRecarga.PROCESSADOR_EXTERNO, "Simulado-B");
+
+      await expect(tentativa).rejects.toBeInstanceOf(ErroMeioPagamentoIndisponivel);
+      await expect(tentativa).rejects.toMatchObject({ gateway: "Simulado-B", alternativas: ["Simulado-A"] });
+      const [recarga] = recargas.listar();
+      expect(recarga!.status).toBe(StatusTransacao.CANCELADA);
+      expect(recarga!.gatewayUtilizado).toBeUndefined();
+    });
+
+    test("meio de pagamento inexistente é rejeitado antes de criar a recarga", async () => {
+      const { controller, recargas } = criarCenario();
+      await expect(
+        controller.recarregar("usuario-1", "p300", MetodoRecarga.PROCESSADOR_EXTERNO, "Inexistente"),
+      ).rejects.toThrow(ErroDominio);
+      expect(recargas.listar()).toHaveLength(0);
     });
 
     test("ErroGatewayIndisponivel guarda o nome do gateway", () => {

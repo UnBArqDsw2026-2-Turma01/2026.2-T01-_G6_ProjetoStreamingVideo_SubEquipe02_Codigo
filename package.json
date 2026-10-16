@@ -8,6 +8,7 @@
     "demo": "tsx src/demo/historia-completa.ts",
     "demo:mp": "tsx src/demo/f1-pagamento-real.ts mercadopago",
     "demo:stripe": "tsx src/demo/f1-pagamento-real.ts stripe",
+    "demo:interativo": "tsx src/demo/f1-interativo.ts",
     "coverage": "jest --coverage",
     "typecheck": "tsc"
   },
