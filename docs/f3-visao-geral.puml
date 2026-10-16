@@ -1,0 +1,118 @@
+@startuml f3-visao-geral
+' F3 · Mensagem destacada no chat (Entrega 3, SubEquipe_02)
+' Padrão estrutural: Decorator. Alinhado ao contrato src/contratos/NotificadorChat.ts
+' e à FaixaDestaque da F2 (src/f2-doacao/FaixaDestaque.ts).
+title F3 · Mensagem destacada no chat - Padrão Decorator
+
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam monochrome true
+skinparam shadowing false
+skinparam style strictuml
+hide circle
+skinparam nodesep 60
+skinparam ranksep 60
+
+' ---------- Integração com a F2 ----------
+class ServicoDoacao <<F2>> {
+  -notificadorChat: NotificadorChat
+  +processarDoacao(...): ResultadoDoacao
+}
+
+interface NotificadorChat <<interface>> <<contrato>> {
+  +exibirMensagemDestacada(doacao: DoacaoNotificada): void
+}
+
+interface DoacaoNotificada <<interface>> <<contrato>> {
+  +doacaoId: string
+  +doador: Usuario
+  +criador: Usuario
+  +quantidadeMoedaVirtual: number
+  +mensagem: string
+}
+
+class FaixaDestaque <<F2>> {
+  +{static} FAIXA_1 ... FAIXA_5: PropriedadesFaixa
+  +{static} paraQuantidade(qtd: number): PropriedadesFaixa
+}
+
+interface PropriedadesFaixa <<interface>> <<F2>> {
+  +codigo: string
+  +quantidadeMinima: number
+  +cor: string
+  +tempoFixacaoMin: number
+  +limiteCaracteres: number
+}
+
+' ---------- F3: Decorator ----------
+class Chat <<Client>> {
+  -historico: MensagemDestacada[]
+  {field} -saida: (linha: string) => void
+  +exibirMensagemDestacada(doacao: DoacaoNotificada): void
+  +mensagensExibidas(): MensagemDestacada[]
+  -montarMensagem(doacao: DoacaoNotificada): MensagemDestacada
+}
+
+interface MensagemDestacada <<interface>> <<Component>> {
+  +cabecalho(): string
+  +texto(): string
+  +tempoFixacaoMin(): number
+  +descrever(): string
+}
+
+class MensagemBase <<ConcreteComponent>> {
+  -autor: string
+  -conteudo: string
+  -quantidadeMoedaVirtual: number
+  +cabecalho(): string
+  +texto(): string
+  +tempoFixacaoMin(): number
+  +descrever(): string
+}
+
+abstract class MensagemDecorator <<Decorator>> {
+  #interna: MensagemDestacada
+  +cabecalho(): string
+  +texto(): string
+  +tempoFixacaoMin(): number
+  +descrever(): string
+}
+
+class ComFaixaCor <<ConcreteDecorator>> {
+  -cor: string
+  +cabecalho(): string
+  +descrever(): string
+}
+
+class ComFixacao <<ConcreteDecorator>> {
+  -minutos: number
+  +cabecalho(): string
+  +tempoFixacaoMin(): number
+  +descrever(): string
+}
+
+class ComLimiteCaracteres <<ConcreteDecorator>> {
+  -limite: number
+  +texto(): string
+  +descrever(): string
+}
+
+' ---------- Relações ----------
+ServicoDoacao -right-> "1" NotificadorChat : notificadorChat
+NotificadorChat .right.> DoacaoNotificada : <<usa>>
+NotificadorChat <|.. Chat
+
+Chat .left.> FaixaDestaque : <<consulta>>
+FaixaDestaque ..> PropriedadesFaixa : <<retorna>>
+Chat .right.> MensagemDestacada : <<cria e usa>>
+
+MensagemDestacada <|.. MensagemBase
+MensagemDestacada <|.. MensagemDecorator : " "
+MensagemDestacada "1" <--o MensagemDecorator : interna
+
+MensagemDecorator <|-- ComLimiteCaracteres
+MensagemDecorator <|-- ComFaixaCor
+MensagemDecorator <|-- ComFixacao
+
+
+@enduml
