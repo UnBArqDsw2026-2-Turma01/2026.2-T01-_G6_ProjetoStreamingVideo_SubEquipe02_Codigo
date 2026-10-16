@@ -20,7 +20,8 @@ export interface ConfiguracaoPreco {
 
 /**
  * Serviço de aplicação da recarga. Cliente do Decorator (monta o preço)
- * e do Adapter (cria o checkout, trocando de gateway se preciso).
+ * e do Adapter (cria o checkout no meio escolhido pelo espectador ou,
+ * sem escolha, no primeiro gateway disponível).
  */
 export class ServicoRecarga {
   private readonly pacotes: readonly Pacote[];
@@ -83,24 +84,23 @@ export class ServicoRecarga {
     return preco;
   }
 
-  /**
-   * Cria a recarga com o preço recalculado no servidor (o valor exibido no
-   * cliente não é confiável) e a encaminha pelo método escolhido.
-   *
-   * Devolve a recarga em um destes estados:
-   * - CONCLUIDA: paga com saldo do criador;
-   * - PENDENTE: checkout criado, aguardando o aviso do processador;
-   * - CANCELADA: saldo insuficiente ou nenhum gateway disponível (ver `motivoCancelamento`).
-   */
   /** Nomes dos meios de pagamento externos, na ordem de preferência do sistema, para o modal oferecer. */
   consultarMeiosPagamento(): string[] {
     return this.gateways.map((g) => g.nome);
   }
 
   /**
+   * Cria a recarga com o preço recalculado no servidor (o valor exibido no
+   * cliente não é confiável) e a encaminha pelo método escolhido.
+   *
    * Com `gatewayEscolhido`, usa só o meio que o espectador escolheu; se ele estiver
-   * indisponível, lança `ErroMeioPagamentoIndisponivel` com as alternativas.
-   * Sem escolha, o sistema tenta os gateways em ordem (fallback O07).
+   * indisponível, cancela a recarga e lança `ErroMeioPagamentoIndisponivel` com as
+   * alternativas (O07). Sem escolha, o sistema tenta os gateways em ordem.
+   *
+   * Quando não lança, devolve a recarga em um destes estados:
+   * - CONCLUIDA: paga com saldo do criador;
+   * - PENDENTE: checkout criado, aguardando o aviso do processador;
+   * - CANCELADA: saldo insuficiente ou nenhum gateway disponível (ver `motivoCancelamento`).
    */
   async processarRecarga(
     usuario: Usuario,

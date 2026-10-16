@@ -47,9 +47,6 @@ export class FakeSdkMercadoPago implements SdkMercadoPago {
   };
 
   readonly payment = {
-    get: async (): Promise<never> => {
-      throw new Error("não usado pelo adaptador");
-    },
     search: async ({ options }: { options?: { external_reference?: string } } = {}): Promise<PaymentSearch> => {
       this.lancarSePreciso();
       const results = this.pagamentos

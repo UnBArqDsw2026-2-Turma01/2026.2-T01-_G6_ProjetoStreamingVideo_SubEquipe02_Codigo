@@ -100,7 +100,7 @@ import type { NotificadorChat } from "../contratos";
 
 | Frente | Etapa | Padrões GoF | Responsável(is) |
 | -- | -- | -- | -- |
-| **F1** | Recarga | **Adapter** (meios de pagamento distintos, fallback O07) · **Proxy** (confirmação idempotente e segura O11, O14) · **Decorator** (preço: desconto, taxa fixa, imposto RN01) | Davi Severiano |
+| **F1** | Recarga | **Adapter** (meios de pagamento distintos; meio escolhido pelo espectador, com alternativas se indisponível O07) · **Proxy** (confirmação idempotente e segura O11, O14) · **Decorator** (preço: desconto, taxa fixa, imposto RN01) | Davi Severiano |
 | **F2** | Doação e Repasse | **Facade** (coordena carteira, chat e repasse) · **Proxy** (impedir repasse duplicado O11) | Daniel Lira e Pedro Rodrigues |
 | **F3** | Mensagem destacada | **Decorator** (camadas visuais: cor de faixa, fixação, emblema SC01, SC02) | Mateus Barreto |
 
@@ -231,7 +231,7 @@ Depois de pagar no Stripe, a página redireciona para `localhost:3000` e dá err
 
 A demonstração executável (`npm run demo`) integra a narrativa em 4 etapas no terminal:
 
-1. **Recarga de moeda virtual (F1):** montagem de preço em camadas, cobrança via gateway com fallback e confirmação segura.
+1. **Recarga de moeda virtual (F1):** montagem de preço em camadas, checkout no meio de pagamento escolhido (com alternativas se ele estiver indisponível) e confirmação segura.
 2. **Doação com mensagem (F2):** débito/crédito atômico e orquestração da doação via Facade.
 3. **Mensagem destacada no chat (F3):** exibição decorada no chat (assíncrona, paralela ao passo 4).
 4. **Repasse ao criador (F2):** acionado pela doação, independente da exibição no chat (coerente com a regra da modelagem da Entrega 2).

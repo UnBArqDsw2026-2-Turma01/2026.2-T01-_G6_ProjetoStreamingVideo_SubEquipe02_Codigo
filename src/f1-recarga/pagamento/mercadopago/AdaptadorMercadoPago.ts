@@ -16,7 +16,7 @@ import {
  */
 export interface SdkMercadoPago {
   readonly preference: Pick<Preference, "create" | "get">;
-  readonly payment: Pick<Payment, "get" | "search">;
+  readonly payment: Pick<Payment, "search">;
 }
 
 const TRADUCAO_STATUS: Record<string, StatusPagamento> = {

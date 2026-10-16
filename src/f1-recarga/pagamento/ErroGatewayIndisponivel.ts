@@ -1,4 +1,8 @@
-/** O processador não pode atender agora; o sistema deve tentar o próximo gateway (O07). */
+/**
+ * O processador não pode atender agora. Lançado pelos adaptadores; o `ServicoRecarga`
+ * o traduz em `ErroMeioPagamentoIndisponivel` (meio escolhido) ou tenta o próximo
+ * gateway (sem escolha), conforme O07.
+ */
 export class ErroGatewayIndisponivel extends Error {
   readonly gateway: string;
 

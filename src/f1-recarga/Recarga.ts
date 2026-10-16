@@ -51,7 +51,7 @@ export class Recarga extends Transacao {
     return this._idCheckout;
   }
 
-  /** O que o cliente mostra ao espectador para pagar (ex.: Pix copia e cola, link, segredo do cliente). */
+  /** Link do checkout que o cliente mostra ao espectador para pagar. */
   get instrucoesPagamento(): string | undefined {
     return this._instrucoesPagamento;
   }
