@@ -3,7 +3,8 @@
  * Permitem testar os adaptadores sem internet e sem credenciais.
  */
 import { MPNotFoundError, type Payment, type Preference } from "mercadopago";
-import type { PaymentIntent, SdkMercadoPago, SdkStripe, StripeParams, StripeStatus } from "../../src/f1-recarga";
+import Stripe from "stripe";
+import type { SdkMercadoPago, SdkStripe } from "../../src/f1-recarga";
 
 type PreferenceCreateData = Parameters<Preference["create"]>[0];
 type PreferenceGetData = Parameters<Preference["get"]>[0];
@@ -98,38 +99,56 @@ export class FakeSdkMercadoPago implements SdkMercadoPago {
   }
 }
 
+type ParametrosSessao = NonNullable<Parameters<SdkStripe["checkout"]["sessions"]["create"]>[0]>;
+type SessaoStripe = Awaited<ReturnType<SdkStripe["checkout"]["sessions"]["retrieve"]>>;
+
+/** Dublê do SDK oficial do Stripe: Checkout Sessions. */
 export class FakeSdkStripe implements SdkStripe {
-  readonly intencoes = new Map<string, PaymentIntent>();
-  proximoErro?: object;
+  readonly sessoes = new Map<string, SessaoStripe>();
+  readonly requisicoes: ParametrosSessao[] = [];
+  /** Erro a lançar na próxima chamada (ex.: new Stripe.errors.StripeAPIError({...})). */
+  proximoErro?: unknown;
   private sequencia = 0;
 
-  async paymentIntentsCreate(params: StripeParams): Promise<PaymentIntent> {
-    this.lancarSePreciso();
-    const id = `pi_${++this.sequencia}`;
-    const intencao: PaymentIntent = {
-      id,
-      amount: params.amount,
-      amount_received: 0,
-      currency: params.currency,
-      status: "requires_payment_method",
-      client_secret: `${id}_secret`,
-      metadata: { ...params.metadata },
-    };
-    this.intencoes.set(id, intencao);
-    return { ...intencao };
+  readonly checkout = {
+    sessions: {
+      create: async (params: ParametrosSessao) => {
+        this.lancarSePreciso();
+        this.requisicoes.push(params);
+        const id = `cs_test_${++this.sequencia}`;
+        const preco = params.line_items![0]!.price_data!;
+        const sessao = {
+          id,
+          url: `https://checkout.stripe.com/c/pay/${id}`,
+          status: "open",
+          payment_status: "unpaid",
+          amount_total: preco.unit_amount!,
+          currency: preco.currency,
+          client_reference_id: params.client_reference_id ?? null,
+          metadata: { ...params.metadata },
+        } as unknown as SessaoStripe;
+        this.sessoes.set(id, sessao);
+        return sessao;
+      },
+      retrieve: async (id: string) => {
+        this.lancarSePreciso();
+        const sessao = this.sessoes.get(id);
+        if (!sessao) {
+          throw new Stripe.errors.StripeInvalidRequestError({ message: `No such checkout.session: '${id}'`, statusCode: 404 });
+        }
+        return { ...sessao };
+      },
+    },
+  } as unknown as SdkStripe["checkout"];
+
+  /** Simula o espectador concluindo o pagamento na página do Stripe. */
+  pagar(id: string): void {
+    Object.assign(this.sessoes.get(id)!, { status: "complete", payment_status: "paid" });
   }
 
-  async paymentIntentsRetrieve(id: string): Promise<PaymentIntent> {
-    this.lancarSePreciso();
-    const intencao = this.intencoes.get(id);
-    if (!intencao) throw { type: "StripeInvalidRequestError", statusCode: 404, message: "No such payment_intent" };
-    return { ...intencao };
-  }
-
-  definirStatus(id: string, status: StripeStatus): void {
-    const intencao = this.intencoes.get(id)!;
-    intencao.status = status;
-    intencao.amount_received = status === "succeeded" ? intencao.amount : 0;
+  /** Simula a sessão expirando sem pagamento. */
+  expirar(id: string): void {
+    Object.assign(this.sessoes.get(id)!, { status: "expired" });
   }
 
   private lancarSePreciso(): void {

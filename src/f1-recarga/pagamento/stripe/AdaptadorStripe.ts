@@ -1,3 +1,4 @@
+import Stripe from "stripe";
 import { Dinheiro } from "../../../dominio";
 import { assinaturaConfere } from "../AssinaturaWebhook";
 import { ErroGatewayIndisponivel } from "../ErroGatewayIndisponivel";
@@ -8,75 +9,107 @@ import {
   type SessaoCheckout,
   type SituacaoPagamento,
 } from "../GatewayPagamento";
-import type { PaymentIntent, SdkStripe, StripeErro, StripeStatus } from "./SdkStripe";
 
-const TRADUCAO_STATUS: Record<StripeStatus, StatusPagamento> = {
-  succeeded: StatusPagamento.APROVADO,
-  // requires_payment_method também aparece depois de uma tentativa recusada:
-  // o espectador ainda pode tentar outro cartão, então segue PENDENTE (Entrega 2).
-  requires_payment_method: StatusPagamento.PENDENTE,
-  requires_confirmation: StatusPagamento.PENDENTE,
-  requires_action: StatusPagamento.PENDENTE,
-  processing: StatusPagamento.PENDENTE,
-  requires_capture: StatusPagamento.PENDENTE,
-  canceled: StatusPagamento.RECUSADO,
-};
-
-const TIPOS_INDISPONIBILIDADE = new Set(["StripeConnectionError", "StripeAPIError", "StripeRateLimitError"]);
+type SessoesCheckout = Stripe["checkout"]["sessions"];
 
 /**
- * Adapter: faz o Stripe parecer um `GatewayPagamento`.
- * Traduz entrada (moeda em minúsculas, referência nos metadados), saída
- * (status, valor recebido) e falhas (conexão, 5xx, limite → `ErroGatewayIndisponivel`).
+ * Adaptee: o SDK oficial do Stripe (pacote `stripe`), Checkout Session.
+ * Só as operações usadas aqui, para os testes poderem trocar a API por dublês.
+ */
+export interface SdkStripe {
+  readonly checkout: { readonly sessions: Pick<SessoesCheckout, "create" | "retrieve"> };
+}
+
+/** Página para onde o Stripe manda o espectador depois de pagar (o front-end, quando existir). */
+const URL_RETORNO_PADRAO = "http://localhost:3000/recarga/concluida";
+
+/**
+ * Validade da sessão: o mínimo aceito pelo Stripe. Sem isso a sessão fica
+ * aberta por 24 h, e um Pix não pago segue PENDENTE durante todo esse tempo.
+ */
+const VALIDADE_SESSAO_MINUTOS = 30;
+
+/**
+ * Adapter: faz o Stripe (Checkout Session) parecer um `GatewayPagamento`.
+ * Traduz entrada (centavos e moeda em minúsculas, recarga como
+ * `client_reference_id`), saída (`payment_status`, valor total) e falhas
+ * (conexão, 5xx, limite → `ErroGatewayIndisponivel`). Não contém regra de negócio.
+ *
+ * `idCheckout` é o id da sessão (`cs_...`), que também identifica o pagamento:
+ * cada sessão tem um único pagamento. Chave `sk_test_` gera links de teste.
  */
 export class AdaptadorStripe implements GatewayPagamento {
   readonly nome = "Stripe";
   private readonly sdk: SdkStripe;
   private readonly segredoWebhook: string;
+  private readonly urlRetorno: string;
 
-  constructor(sdk: SdkStripe, segredoWebhook: string) {
+  constructor(sdk: SdkStripe, segredoWebhook: string, urlRetorno = URL_RETORNO_PADRAO) {
     this.sdk = sdk;
     this.segredoWebhook = segredoWebhook;
+    this.urlRetorno = urlRetorno;
+  }
+
+  /** Cria o adaptador ligado à API real do Stripe. */
+  static conectar(chaveSecreta: string, segredoWebhook: string, urlRetorno?: string): AdaptadorStripe {
+    return new AdaptadorStripe(new Stripe(chaveSecreta), segredoWebhook, urlRetorno);
   }
 
   async iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout> {
-    const intencao = await this.chamar(() =>
-      this.sdk.paymentIntentsCreate({
-        amount: valor.centavos,
-        currency: valor.moeda.toLowerCase(),
+    const sessao = await this.chamar(() =>
+      this.sdk.checkout.sessions.create({
+        mode: "payment",
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: valor.moeda.toLowerCase(),
+              unit_amount: valor.centavos,
+              product_data: { name: `Recarga de moeda virtual ${recargaId}` },
+            },
+          },
+        ],
+        client_reference_id: recargaId,
         metadata: { recargaId },
+        success_url: this.urlRetorno,
+        expires_at: Math.floor(Date.now() / 1000) + VALIDADE_SESSAO_MINUTOS * 60,
       }),
     );
-    return { idCheckout: intencao.id, instrucoes: intencao.client_secret };
+    return { idCheckout: sessao.id, instrucoes: sessao.url ?? "" };
   }
 
-  async consultarPagamento(idPagamento: string): Promise<SituacaoPagamento> {
-    const intencao = await this.chamar(() => this.sdk.paymentIntentsRetrieve(idPagamento));
-    return this.traduzirSituacao(intencao);
+  async consultarPagamento(idCheckout: string): Promise<SituacaoPagamento> {
+    const sessao = await this.chamar(() => this.sdk.checkout.sessions.retrieve(idCheckout));
+    const pago = sessao.payment_status !== "unpaid";
+    return {
+      idPagamento: sessao.id,
+      referencia: sessao.client_reference_id ?? sessao.metadata?.recargaId ?? "",
+      // Enquanto a sessão está aberta, o espectador pode tentar outro cartão: segue PENDENTE.
+      // Sessão expirada sem pagamento não aceita mais tentativas: RECUSADO.
+      status: pago
+        ? StatusPagamento.APROVADO
+        : sessao.status === "expired"
+          ? StatusPagamento.RECUSADO
+          : StatusPagamento.PENDENTE,
+      valorPago: Dinheiro.deCentavos(pago ? (sessao.amount_total ?? 0) : 0, (sessao.currency ?? "brl").toUpperCase()),
+    };
   }
 
   validarWebhook(notificacao: NotificacaoPagamento): boolean {
     return assinaturaConfere(this.segredoWebhook, notificacao);
   }
 
-  private traduzirSituacao(intencao: PaymentIntent): SituacaoPagamento {
-    return {
-      idPagamento: intencao.id,
-      referencia: intencao.metadata.recargaId ?? "",
-      status: TRADUCAO_STATUS[intencao.status],
-      valorPago: Dinheiro.deCentavos(intencao.amount_received, intencao.currency.toUpperCase()),
-    };
-  }
-
   private async chamar<T>(operacao: () => Promise<T>): Promise<T> {
     try {
       return await operacao();
     } catch (erro) {
-      const { type, statusCode, message } = (erro ?? {}) as StripeErro;
       const indisponivel =
-        (type !== undefined && TIPOS_INDISPONIBILIDADE.has(type)) || (statusCode !== undefined && statusCode >= 500);
+        erro instanceof Stripe.errors.StripeConnectionError ||
+        erro instanceof Stripe.errors.StripeAPIError ||
+        erro instanceof Stripe.errors.StripeRateLimitError ||
+        (erro instanceof Stripe.errors.StripeError && (erro.statusCode ?? 0) >= 500);
       if (indisponivel) {
-        throw new ErroGatewayIndisponivel(this.nome, message ?? type ?? `HTTP ${statusCode}`);
+        throw new ErroGatewayIndisponivel(this.nome, erro.message);
       }
       throw erro;
     }

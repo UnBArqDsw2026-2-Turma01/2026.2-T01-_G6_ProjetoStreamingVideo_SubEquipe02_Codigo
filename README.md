@@ -16,6 +16,7 @@ Organizada como uma história de uso da plataforma:
 npm install
 npm run demo         # história completa no terminal (processadores simulados, sem internet)
 npm run demo:mp      # F1 com o Mercado Pago real, em conta de teste (ver abaixo)
+npm run demo:stripe  # F1 com o Stripe real, em modo de teste (ver abaixo)
 npm test             # testes
 npm run coverage     # relatório de cobertura
 npm run typecheck    # checagem estática de tipos (tsc)
@@ -49,7 +50,7 @@ npm run typecheck    # checagem estática de tipos (tsc)
 │   ├── f1-recarga/       # Catálogo, Decorator do preço, Adapter e Proxy (Frente 1)
 │   ├── f2-doacao/        # Facade e Proxy do repasse (Frente 2)
 │   ├── f3-chat/          # Decorator da mensagem destacada (Frente 3)
-│   └── demo/             # Demonstrações executáveis (história completa e F1 com Mercado Pago)
+│   └── demo/             # Demonstrações executáveis (história completa e F1 com processadores reais)
 ├── tests/
 │   ├── configuracao.test.ts # Teste de verificação do ambiente
 │   ├── compartilhado/       # Testes utilitários compartilhados
@@ -116,6 +117,7 @@ import type { NotificadorChat } from "../contratos";
 - **Catálogo único:** os pacotes (20 de moeda virtual por R$ 1, com bônus progressivo de 0% a 40%) e a promoção (29% de desconto, 5% de imposto) pertencem ao sistema e valem para **todos** os meios de pagamento. Os gateways recebem só o valor final; nunca conhecem pacotes nem moeda virtual.
 - **Só reais:** toda a recarga opera em BRL; não há conversão de moeda.
 - **Mercado Pago (Checkout Pro):** o `AdaptadorMercadoPago` adapta direto o SDK oficial (`mercadopago`). O `idCheckout` é o id da preferência; a consulta encontra o pagamento pela `external_reference` (id da recarga).
+- **Stripe (Checkout Session):** o `AdaptadorStripe` adapta direto o SDK oficial (`stripe`). O `idCheckout` é o id da sessão (`cs_...`), e a recarga vai como `client_reference_id`. Sessão paga é APROVADO, aberta é PENDENTE e expirada é RECUSADO.
 
 ### Rodando com o Mercado Pago (conta de teste)
 
@@ -130,7 +132,19 @@ import type { NotificadorChat } from "../contratos";
 
 4. Rode `npm run demo:mp`, abra o link em aba anônima e pague logado com o **comprador de teste**. O demo detecta a aprovação, passa o aviso pelo Proxy e credita as moedas.
 
-> O demo recusa tokens da sua conta real, que gerariam cobrança de verdade (para forçar: `MERCADO_PAGO_PERMITIR_PRODUCAO=1`). O webhook ainda é simulado localmente depois que a aprovação é detectada por consulta.
+### Rodando com o Stripe (modo de teste)
+
+1. No [dashboard do Stripe](https://dashboard.stripe.com/test/apikeys), em modo de teste, copie a **chave secreta** (`sk_test_...`).
+2. Adicione ao `.env`:
+
+   ```bash
+   STRIPE_SECRET_KEY=sk_test_...
+   STRIPE_WEBHOOK_SECRET=um-segredo-local
+   ```
+
+3. Rode `npm run demo:stripe`, abra o link e pague com o cartão `4242 4242 4242 4242`, qualquer validade futura e qualquer CVC. Depois do pagamento, o Stripe redireciona para `localhost:3000`; a página não existir é esperado, porque o demo confirma o pagamento por consulta.
+
+> Os dois demos (`src/demo/f1-pagamento-real.ts`) recusam credenciais de produção, que gerariam cobrança de verdade (para forçar: `PERMITIR_PRODUCAO=1`). O webhook ainda é simulado localmente depois que a aprovação é detectada por consulta.
 
 ---
 
@@ -169,7 +183,7 @@ Relatório da SubEquipe_02: *link a inserir*.
 - **Runtime:** [Node.js](https://nodejs.org/) (>= 18)
 - **Testes:** [Jest](https://jestjs.io/) com [@swc/jest](https://swc.rs/)
 - **Execução Direta:** [tsx](https://github.com/privatenumber/tsx)
-- **Pagamentos (F1):** [SDK oficial do Mercado Pago](https://github.com/mercadopago/sdk-nodejs) (`mercadopago` v3)
+- **Pagamentos (F1):** SDKs oficiais do [Mercado Pago](https://github.com/mercadopago/sdk-nodejs) (`mercadopago` v3) e do [Stripe](https://github.com/stripe/stripe-node) (`stripe` v23)
 
 ---
 

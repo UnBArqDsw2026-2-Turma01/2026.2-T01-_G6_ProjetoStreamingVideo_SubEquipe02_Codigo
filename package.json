@@ -6,7 +6,8 @@
   "scripts": {
     "test": "jest",
     "demo": "tsx src/demo/historia-completa.ts",
-    "demo:mp": "tsx src/demo/f1-mercadopago-real.ts",
+    "demo:mp": "tsx src/demo/f1-pagamento-real.ts mercadopago",
+    "demo:stripe": "tsx src/demo/f1-pagamento-real.ts stripe",
     "coverage": "jest --coverage",
     "typecheck": "tsc"
   },
@@ -32,6 +33,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "mercadopago": "^3.6.1"
+    "mercadopago": "^3.6.1",
+    "stripe": "^23.0.0"
   }
 }

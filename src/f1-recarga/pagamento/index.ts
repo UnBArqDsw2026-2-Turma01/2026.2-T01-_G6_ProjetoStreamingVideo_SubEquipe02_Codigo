@@ -8,7 +8,6 @@ export {
 export { ErroGatewayIndisponivel } from "./ErroGatewayIndisponivel";
 export { assinarNotificacao, assinaturaConfere } from "./AssinaturaWebhook";
 export { AdaptadorMercadoPago, type SdkMercadoPago } from "./mercadopago/AdaptadorMercadoPago";
-export { AdaptadorStripe } from "./stripe/AdaptadorStripe";
-export type { PaymentIntent, SdkStripe, StripeErro, StripeParams, StripeStatus } from "./stripe/SdkStripe";
+export { AdaptadorStripe, type SdkStripe } from "./stripe/AdaptadorStripe";
 export { AdaptadorProcessadorSimulado } from "./simulado/AdaptadorProcessadorSimulado";
 export { ProcessadorSimulado, type RespostaSimulada } from "./simulado/ProcessadorSimulado";
