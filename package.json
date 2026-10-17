@@ -8,6 +8,9 @@
     "demo": "tsx src/demo/historia-completa.ts",
     "demo:f2": "tsx src/demo/demo-f2.ts",
     "demo:f3": "tsx src/demo/demo-f3.ts",
+    "demo:mp": "tsx src/demo/f1-pagamento-real.ts mercadopago",
+    "demo:stripe": "tsx src/demo/f1-pagamento-real.ts stripe",
+    "demo:interativo": "tsx src/demo/f1-interativo.ts",
     "coverage": "jest --coverage",
     "typecheck": "tsc"
   },
@@ -31,5 +34,9 @@
     "jest": "^30.5.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "mercadopago": "^3.6.1",
+    "stripe": "^23.0.0"
   }
 }
