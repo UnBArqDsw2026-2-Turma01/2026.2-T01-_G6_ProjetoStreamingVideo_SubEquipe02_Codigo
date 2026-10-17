@@ -1,0 +1,131 @@
+@startuml visao-geral-integrada
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam nodesep 32
+skinparam ranksep 40
+skinparam packageFontSize 12
+skinparam ArrowFontSize 9
+skinparam NoteBackgroundColor #FFFDE7
+skinparam packageBorderThickness 1.5
+top to bottom direction
+hide empty members
+
+title Visão geral integrada — domínio, recarga e doação
+
+package "1. Domínio" as DOM #F3E8FC {
+  abstract class Transacao
+  class Recarga
+  class Doacao
+  class DoacaoComMensagem
+  class Saque
+  class Usuario
+  class Carteira
+  class Dinheiro <<value object>>
+
+  Transacao <|-- Recarga
+  Transacao <|-- Doacao
+  Transacao <|-- Saque
+  Doacao <|-- DoacaoComMensagem
+  Transacao --> Usuario
+  Usuario *-- Carteira
+}
+
+package "2. Catálogo, preço e pagamento" as INT {
+  package "Catálogo" as CAT #EDE7F6 {
+    class catalogo <<módulo>>
+    interface Pacote
+    interface ConfiguracaoPreco
+    catalogo --> Pacote
+    catalogo --> ConfiguracaoPreco
+  }
+  package "Preço" as PRC #E8F4EA {
+    interface Preco <<Component>>
+    abstract class PrecoDecorator <<Decorator>>
+    Preco <|.. PrecoDecorator
+    PrecoDecorator o--> Preco
+  }
+  package "Gateway de pagamento" as GW #FFF4E0 {
+    interface GatewayPagamento <<Target>>
+  }
+  package "Confirmação" as CFM #E3EEFC {
+    interface ConfirmadorPagamento <<Subject>>
+    class ProxyConfirmacaoSegura <<Proxy>>
+    class ServicoConfirmacao <<RealSubject>>
+    ConfirmadorPagamento <|.. ProxyConfirmacaoSegura
+    ConfirmadorPagamento <|.. ServicoConfirmacao
+    ProxyConfirmacaoSegura --> ServicoConfirmacao : real
+  }
+  package "Financeiro" as FIN {
+    class ServicoFinanceiro <<Colleague>>
+    note bottom of ServicoFinanceiro
+      consulta saldo no dominio
+    end note
+  }
+
+  Pacote -[hidden]right- Preco
+  GatewayPagamento -[hidden]right- ConfirmadorPagamento
+  ConfirmadorPagamento -[hidden]right- ServicoFinanceiro
+  Pacote -[hidden]down- GatewayPagamento
+  Preco -[hidden]down- ConfirmadorPagamento
+
+  ServicoConfirmacao -right-> ServicoFinanceiro : creditar
+}
+
+package "3. Aplicação" as APL {
+  package "Recarga" as REC {
+    class ServicoRecarga <<control>>
+    note bottom of ServicoRecarga
+      depende de catalogo, preco e gateway
+      webhook de confirmacao
+      cria entidade de recarga
+    end note
+  }
+  package "Doação" as DOA #FCE4EC {
+    class ServicoDoacao <<Facade>>
+    class MediatorDoacao <<Mediator>>
+    class MediatorDoacaoComMensagem <<Mediator>>
+
+    MediatorDoacao -[hidden]right- MediatorDoacaoComMensagem
+    ServicoDoacao -[hidden]down- MediatorDoacao
+    ServicoDoacao -[hidden]down- MediatorDoacaoComMensagem
+
+    ServicoDoacao -down-> MediatorDoacao : <<usa>>
+    ServicoDoacao -down-> MediatorDoacaoComMensagem : <<usa>>
+
+    note bottom of ServicoDoacao
+      Facade usa o colleague financeiro
+      Mediators chamam o colleague
+      cria entidades de doacao
+      (detalhe: doacao-visao-geral)
+    end note
+  }
+  ServicoRecarga -[hidden]right- ServicoDoacao
+}
+
+package "4. Apresentação" as APR {
+  class RecargaController <<Client>>
+  class DoacaoController <<Client>>
+  RecargaController -[hidden]right- DoacaoController
+}
+
+' Empilhamento vertical estrito
+Recarga -[hidden]down- Pacote
+Doacao -[hidden]down- Preco
+Saque -[hidden]down- GatewayPagamento
+Carteira -[hidden]down- ServicoFinanceiro
+Pacote -[hidden]down- ServicoRecarga
+GatewayPagamento -[hidden]down- ServicoDoacao
+ServicoRecarga -[hidden]down- RecargaController
+ServicoDoacao -[hidden]down- DoacaoController
+
+RecargaController -up-> ServicoRecarga
+DoacaoController -up-> ServicoDoacao
+
+legend bottom
+  Recarga: f1-visao-geral.puml  |  Doação: doacao-visao-geral.puml
+  Mediator: Client <<usa>> Mediator/Colleague ; Mediator → Colleague <<chama>>
+  Associações longas entre pacotes: ver notas em Recarga e Doação
+endlegend
+
+@enduml

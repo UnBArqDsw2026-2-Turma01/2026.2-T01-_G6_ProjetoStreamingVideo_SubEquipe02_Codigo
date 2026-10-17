@@ -1,11 +1,12 @@
 import type { RepositorioEmMemoria } from "../compartilhado";
 import { ErroDominio, type Usuario } from "../dominio";
-import type { OpcoesDoacao, ResultadoDoacao, ServicoDoacao } from "./ServicoDoacao";
+import type { ResultadoDoacaoSimples } from "./MediatorDoacao";
+import type { ResultadoDoacaoComMensagem } from "./MediatorDoacaoComMensagem";
+import type { OpcoesDoacao, ServicoDoacao } from "./ServicoDoacao";
 
 /**
  * Porta de entrada do fluxo de doação (Entrega 2: DoacaoController).
- * Cliente da Facade: comunica-se exclusivamente com o `ServicoDoacao`,
- * buscando os usuários no repositório e exibindo o resultado no terminal (Ata S2_03, D04).
+ * Cliente da Facade: comunica-se exclusivamente com o ServicoDoacao.
  */
 export class DoacaoController {
   constructor(
@@ -21,17 +22,37 @@ export class DoacaoController {
     return this.servicoDoacao.consultarOpcoesDoacao(canal, doador);
   }
 
-  /** Realiza a doação entre dois usuários, delegando o processamento à Facade. */
+  /** Doação simples (sem mensagem destacada). */
   doar(
     doadorId: string,
     criadorId: string,
     quantidadeMoedaVirtual: number,
-    mensagem: string,
-  ): ResultadoDoacao {
+  ): ResultadoDoacaoSimples {
     const doador = this.obterUsuarioOuFalhar(doadorId, "Espectador");
     const criador = this.obterUsuarioOuFalhar(criadorId, "Criador");
 
-    const resultado = this.servicoDoacao.processarDoacao(
+    const resultado = this.servicoDoacao.doar(doador, criador, quantidadeMoedaVirtual);
+    const { doacao } = resultado;
+
+    console.log(
+      `[F2 Facade] ${doacao.id} (${doacao.status}): ${doador.nome} doou ${quantidadeMoedaVirtual} de moeda virtual para ${criador.nome} ` +
+        `· repasse de ${doacao.valorRepasse.formatar()}`,
+    );
+
+    return resultado;
+  }
+
+  /** Doação com mensagem destacada no chat. */
+  doarComMensagem(
+    doadorId: string,
+    criadorId: string,
+    quantidadeMoedaVirtual: number,
+    mensagem: string,
+  ): ResultadoDoacaoComMensagem {
+    const doador = this.obterUsuarioOuFalhar(doadorId, "Espectador");
+    const criador = this.obterUsuarioOuFalhar(criadorId, "Criador");
+
+    const resultado = this.servicoDoacao.doarComMensagem(
       doador,
       criador,
       quantidadeMoedaVirtual,

@@ -1,9 +1,9 @@
-/** Montagem comum aos testes da F2: usuários, repositórios, financeiro, chat provisório e controller. */
+/** Montagem comum aos testes da F2: usuários, repositórios, financeiro, chat e wiring Mediator. */
 import { GeradorId, RepositorioEmMemoria } from "../../src/compartilhado";
 import { NotificadorChatProvisorio, type NotificadorChat } from "../../src/contratos";
 import { Usuario } from "../../src/dominio";
 import { ServicoFinanceiro } from "../../src/financeiro";
-import { Doacao, DoacaoController, ServicoDoacao } from "../../src/f2-doacao";
+import { montarDoacao } from "../../src/f2-doacao";
 
 export function criarCenario(opcoes: { chat?: NotificadorChat; saldoDoador?: number } = {}) {
   const doador = new Usuario("usuario-doador", "Espectador", "doador@exemplo.com");
@@ -21,13 +21,17 @@ export function criarCenario(opcoes: { chat?: NotificadorChat; saldoDoador?: num
   usuarios.salvar(criador);
   usuarios.salvar(criadorNaoMonetizado);
 
-  const repositorioDoacoes = new RepositorioEmMemoria<Doacao>();
   const financeiro = new ServicoFinanceiro();
   const geradorId = new GeradorId();
   const chat = opcoes.chat ?? new NotificadorChatProvisorio(true);
 
-  const servico = new ServicoDoacao(financeiro, chat, repositorioDoacoes, geradorId);
-  const controller = new DoacaoController(servico, usuarios);
+  const { controller, servico, mediadorSimples, mediadorComMensagem, repositorioDoacoes } =
+    montarDoacao({
+      financeiro,
+      notificadorChat: chat,
+      usuarios,
+      geradorId,
+    });
 
   return {
     doador,
@@ -40,5 +44,7 @@ export function criarCenario(opcoes: { chat?: NotificadorChat; saldoDoador?: num
     chat,
     servico,
     controller,
+    mediadorSimples,
+    mediadorComMensagem,
   };
 }

@@ -25,10 +25,23 @@ describe("DoacaoController (Cliente da Facade)", () => {
     expect(opcoes.habilitadoAReceber).toBe(true);
   });
 
-  test("doar resolve usuários e aciona a Facade, imprimindo log formatado no terminal", () => {
+  test("doar resolve usuários e aciona a Facade sem mensagem", () => {
     const { controller, doador, criador } = criarCenario({ saldoDoador: 3000 });
 
-    const resultado = controller.doar(
+    const resultado = controller.doar(doador.id, criador.id, 2000);
+
+    expect(resultado.doacao.status).toBe(StatusTransacao.CONCLUIDA);
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "[F2 Facade] doacao-1 (CONCLUIDA): Espectador doou 2000 de moeda virtual para Criador",
+      ),
+    );
+  });
+
+  test("doarComMensagem aciona a Facade e imprime faixa no log", () => {
+    const { controller, doador, criador } = criarCenario({ saldoDoador: 3000 });
+
+    const resultado = controller.doarComMensagem(
       doador.id,
       criador.id,
       2000,
@@ -36,9 +49,8 @@ describe("DoacaoController (Cliente da Facade)", () => {
     );
 
     expect(resultado.doacao.status).toBe(StatusTransacao.CONCLUIDA);
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining("[F2 Facade] doacao-1 (CONCLUIDA): Espectador doou 2000 de moeda virtual para Criador"),
-    );
+    expect(resultado.doacao.faixa.codigo).toBe("FAIXA_3");
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("FAIXA_3"));
   });
 
   test("emite aviso assíncrono no terminal quando o chat falha", () => {
@@ -52,25 +64,25 @@ describe("DoacaoController (Cliente da Facade)", () => {
       saldoDoador: 1000,
     });
 
-    const resultado = controller.doar(doador.id, criador.id, 500, "Apoio");
+    const resultado = controller.doarComMensagem(doador.id, criador.id, 500, "Apoio");
 
     expect(resultado.doacao.status).toBe(StatusTransacao.CONCLUIDA);
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("[F2 Facade] Aviso: Doação e repasse concluídos, mas o chat falhou ao exibir o destaque"),
+      expect.stringContaining(
+        "[F2 Facade] Aviso: Doação e repasse concluídos, mas o chat falhou ao exibir o destaque",
+      ),
     );
   });
 
   test("lança ErroDominio se o espectador de origem não for encontrado", () => {
     const { controller, criador } = criarCenario();
-    expect(() =>
-      controller.doar("id-fantasma", criador.id, 500, "Mensagem"),
-    ).toThrow(ErroDominio);
+    expect(() => controller.doar("id-fantasma", criador.id, 500)).toThrow(ErroDominio);
   });
 
   test("lança ErroDominio se o criador destinatário não for encontrado", () => {
     const { controller, doador } = criarCenario();
     expect(() =>
-      controller.doar(doador.id, "id-fantasma", 500, "Mensagem"),
+      controller.doarComMensagem(doador.id, "id-fantasma", 500, "Mensagem"),
     ).toThrow(ErroDominio);
   });
 });

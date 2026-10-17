@@ -1,0 +1,134 @@
+@startuml doacao
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam nodesep 70
+skinparam ranksep 55
+skinparam packageFontSize 13
+skinparam ArrowFontSize 10
+top to bottom direction
+hide empty members
+
+title Doação e repasse — Facade e Mediator
+
+legend top right
+  ① Facade = Client do Mediator
+  ② Client <<usa>> Mediator (setas) e Colleague (campos)
+  ③ Mediator → Colleague <<chama>>
+  Mediators usam PerfilMonetizacao.
+endlegend
+
+together {
+  package "Apresentação" as APR {
+    class DoacaoController <<Client>> {
+      +doar(...): Promise<Doacao>
+      +doarComMensagem(...): Promise<DoacaoComMensagem>
+    }
+  }
+
+  package "① Facade" as FAC #FCE4EC {
+    class ServicoDoacao <<Facade>> {
+      -mediadorSimples: MediatorDoacao
+      -mediadorComMensagem: MediatorDoacaoComMensagem
+      -servicoFinanceiro: ServicoFinanceiro
+      -notificadorChat: NotificadorChat
+      +doar(...): Promise<Doacao>
+      +doarComMensagem(...): Promise<DoacaoComMensagem>
+    }
+  }
+
+  package "② Mediator" as MED #E8F4EA {
+    class MediatorDoacao <<Mediator>> {
+      +processar(...): Promise<Doacao>
+    }
+    class MediatorDoacaoComMensagem <<Mediator>> {
+      +processar(...): Promise<DoacaoComMensagem>
+    }
+    MediatorDoacao -[hidden]right- MediatorDoacaoComMensagem
+  }
+
+  package "Colleague" as COL {
+    class ServicoFinanceiro <<Colleague>> {
+      +transferirDoacao(...): boolean
+    }
+    interface NotificadorChat <<Colleague>> {
+      +exibirMensagemDestacada(doacao: DoacaoNotificada): void
+    }
+    ServicoFinanceiro -[hidden]right- NotificadorChat
+  }
+
+  DoacaoController -[hidden]down- ServicoDoacao
+  ServicoDoacao -[hidden]down- MediatorDoacao
+  MediatorDoacao -[hidden]down- ServicoFinanceiro
+  MediatorDoacaoComMensagem -[hidden]down- NotificadorChat
+
+  DoacaoController -down-> ServicoDoacao : doar /\ndoarComMensagem
+  ServicoDoacao -down-> MediatorDoacao : <<usa>>
+  ServicoDoacao -down-> MediatorDoacaoComMensagem : <<usa>>
+
+  ' Verticais: ambos → Financeiro; ComMensagem → Chat
+  MediatorDoacao -down-> ServicoFinanceiro : <<chama>>
+  MediatorDoacaoComMensagem -down-> ServicoFinanceiro : <<chama>>
+  MediatorDoacaoComMensagem -down-> NotificadorChat : <<chama>>
+}
+
+package "Entidades deste fluxo" as ENT #F3E8FC {
+  class Doacao {
+    +quantidadeMoedaVirtual: number
+    +valorRepasse: Dinheiro
+    +concluir(): void
+  }
+  class DoacaoComMensagem {
+    +mensagem: string
+    +faixa: string
+  }
+  class PerfilMonetizacao {
+    +estaHabilitadoAReceber(): boolean
+  }
+  class Usuario {
+    +id: string
+    +perfil: PerfilMonetizacao
+  }
+  class Carteira {
+    +deduzirMoedaVirtual(quantidade: number): boolean
+    +adicionarDinheiro(valor: Dinheiro): void
+  }
+  class Dinheiro <<value object>> {
+    +centavos: number
+    +moeda: string
+  }
+  interface DoacaoNotificada {
+    +doacaoId: string
+    +doador: Usuario
+    +criador: Usuario
+    +quantidadeMoedaVirtual: number
+    +mensagem: string
+  }
+
+  Doacao <|-- DoacaoComMensagem
+  Usuario *-- "1" PerfilMonetizacao
+  Usuario *-- "1" Carteira
+
+  Doacao -[hidden]right- DoacaoComMensagem
+  Doacao -[hidden]down- Carteira
+  DoacaoComMensagem -[hidden]down- DoacaoNotificada
+  Carteira -[hidden]right- DoacaoNotificada
+  DoacaoComMensagem -[hidden]right- PerfilMonetizacao
+  PerfilMonetizacao -[hidden]down- Usuario
+  Usuario -[hidden]down- Dinheiro
+}
+
+MED -[hidden]right- ENT
+COL -[hidden]right- ENT
+MediatorDoacao -[hidden]right- Doacao
+MediatorDoacaoComMensagem -[hidden]right- DoacaoComMensagem
+ServicoFinanceiro -[hidden]right- Carteira
+NotificadorChat -[hidden]right- DoacaoNotificada
+
+' Domínio: horizontais por faixa (create no nível Mediator; debita/recebe no nível Colleague)
+MediatorDoacao -right-> Doacao : <<create>>
+MediatorDoacaoComMensagem -right-> DoacaoComMensagem : <<create>>
+ServicoFinanceiro -right-> Carteira : debita / credita
+NotificadorChat -right-> DoacaoNotificada : recebe
+
+@enduml
