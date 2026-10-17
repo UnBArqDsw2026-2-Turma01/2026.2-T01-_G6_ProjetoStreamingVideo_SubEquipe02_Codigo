@@ -1,11 +1,10 @@
 import { Dinheiro, ErroDominio, Transacao, type Usuario } from "../dominio";
-import { FaixaDestaque, type PropriedadesFaixa } from "./FaixaDestaque";
 
 /**
- * Doação de moeda virtual com mensagem destacada (Entrega 2: Doacao especializa Transacao).
+ * Doação de moeda virtual (Entrega 2: Doacao especializa Transacao).
  *
- * O usuário herdado de Transacao é o doador. Ao nascer PENDENTE, classifica a doação
- * na faixa correspondente (SC01, SC02) e calcula o valor líquido repassado ao criador.
+ * O usuário herdado de Transacao é o doador. Ao nascer PENDENTE, calcula o valor
+ * líquido repassado ao criador. Mensagem e faixa ficam em DoacaoComMensagem.
  */
 export class Doacao extends Transacao {
   /**
@@ -16,8 +15,6 @@ export class Doacao extends Transacao {
 
   readonly criador: Usuario;
   readonly quantidadeMoedaVirtual: number;
-  readonly mensagem: string;
-  readonly faixa: PropriedadesFaixa;
   readonly valorRepasse: Dinheiro;
 
   constructor(
@@ -25,27 +22,19 @@ export class Doacao extends Transacao {
     doador: Usuario,
     criador: Usuario,
     quantidadeMoedaVirtual: number,
-    mensagem: string,
     taxaRepasse = Doacao.TAXA_REPASSE_PADRAO,
     moeda = "BRL",
   ) {
     super(id, doador);
 
-    const faixa = FaixaDestaque.paraQuantidade(quantidadeMoedaVirtual);
-
-    if (mensagem.trim().length === 0) {
-      throw new ErroDominio("A mensagem da doação não pode estar vazia.");
-    }
-    if (mensagem.length > faixa.limiteCaracteres) {
+    if (!Number.isInteger(quantidadeMoedaVirtual) || quantidadeMoedaVirtual <= 0) {
       throw new ErroDominio(
-        `A mensagem excede o limite de ${faixa.limiteCaracteres} caracteres da ${faixa.codigo} (SC02).`,
+        `A quantidade de moeda virtual deve ser um inteiro positivo: ${quantidadeMoedaVirtual}`,
       );
     }
 
     this.criador = criador;
     this.quantidadeMoedaVirtual = quantidadeMoedaVirtual;
-    this.mensagem = mensagem;
-    this.faixa = faixa;
     this.valorRepasse = this.calcularValorRepasse(taxaRepasse, moeda);
   }
 
