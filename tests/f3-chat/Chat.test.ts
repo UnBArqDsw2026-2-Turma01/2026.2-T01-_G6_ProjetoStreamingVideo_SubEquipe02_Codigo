@@ -95,7 +95,12 @@ describe("Integração com a F2 (contrato NotificadorChat)", () => {
     const { chat, linhas } = chatSilencioso();
     const cenario = criarCenario({ chat, saldoDoador: 3000 });
 
-    cenario.controller.doar(cenario.doador.id, cenario.criador.id, 2000, "Apoio enviado!");
+    cenario.controller.doarComMensagem(
+      cenario.doador.id,
+      cenario.criador.id,
+      2000,
+      "Apoio enviado!",
+    );
 
     expect(linhas[0]).toBe("[chat] [LARANJA] Espectador · 2000 de moeda virtual · fixada por 10 min");
     expect(linhas[1]).toBe('       "Apoio enviado!"');
@@ -107,7 +112,12 @@ describe("Integração com a F2 (contrato NotificadorChat)", () => {
     });
     const cenario = criarCenario({ chat: chatComFalha, saldoDoador: 3000 });
 
-    const resultado = cenario.controller.doar(cenario.doador.id, cenario.criador.id, 2000, "Oi!");
+    const resultado = cenario.controller.doarComMensagem(
+      cenario.doador.id,
+      cenario.criador.id,
+      2000,
+      "Oi!",
+    );
 
     expect(cenario.doador.carteira.saldoMoedaVirtual).toBe(1000);
     expect(resultado.notificacaoChatEnviada).toBe(false);

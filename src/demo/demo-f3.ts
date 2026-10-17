@@ -13,7 +13,7 @@ import { GeradorId, RepositorioEmMemoria } from "../compartilhado";
 import type { DoacaoNotificada } from "../contratos";
 import { Usuario } from "../dominio";
 import { ServicoFinanceiro } from "../financeiro";
-import { Doacao, DoacaoController, ServicoDoacao } from "../f2-doacao";
+import { montarDoacao } from "../f2-doacao";
 import { Chat } from "../f3-chat";
 
 /** Executa os cenários da mensagem destacada, mostrando as camadas montadas em cada um. */
@@ -59,11 +59,18 @@ export function demonstrarMensagemDestacada(): void {
   const financeiro = new ServicoFinanceiro();
   financeiro.creditarMoedaVirtual(doador, 6000);
 
-  const controller = new DoacaoController(
-    new ServicoDoacao(financeiro, chat, new RepositorioEmMemoria<Doacao>(), new GeradorId()),
+  const { controller } = montarDoacao({
+    financeiro,
+    notificadorChat: chat,
     usuarios,
+    geradorId: new GeradorId(),
+  });
+  controller.doarComMensagem(
+    doador.id,
+    canal.id,
+    5000,
+    "Que jogada! Mandando apoio pro canal.",
   );
-  controller.doar(doador.id, canal.id, 5000, "Que jogada! Mandando apoio pro canal.");
 }
 
 if (require.main === module) {

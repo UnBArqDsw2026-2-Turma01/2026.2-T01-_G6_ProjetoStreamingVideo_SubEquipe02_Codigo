@@ -1,5 +1,6 @@
 import { StatusTransacao } from "../../src/dominio";
 import { type NotificadorChat } from "../../src/contratos";
+import { DoacaoComMensagem } from "../../src/f2-doacao";
 import { criarCenario } from "./cenario";
 
 describe("ServicoDoacao (Padrão GoF: Facade)", () => {
@@ -22,41 +23,53 @@ describe("ServicoDoacao (Padrão GoF: Facade)", () => {
     });
   });
 
-  describe("processamento de doação e repasse atômico", () => {
-    test("realiza doação com sucesso: debita moedas, repassa dinheiro, conclui transação e notifica chat", () => {
-      const { servico, doador, criador, repositorioDoacoes } = criarCenario({ saldoDoador: 3000 });
+  describe("doar (MediatorDoacao)", () => {
+    test("realiza doação simples sem notificar o chat", () => {
+      const { servico, doador, criador, repositorioDoacoes } = criarCenario({
+        saldoDoador: 3000,
+      });
 
-      const resultado = servico.processarDoacao(
+      const resultado = servico.doar(doador, criador, 1000);
+
+      expect(resultado.doacao.status).toBe(StatusTransacao.CONCLUIDA);
+      expect(resultado.doacao).not.toBeInstanceOf(DoacaoComMensagem);
+      expect(doador.carteira.saldoMoedaVirtual).toBe(2000);
+      expect(criador.carteira.saldoDinheiro.centavos).toBe(700);
+      expect(repositorioDoacoes.buscarPorId(resultado.doacao.id)).toBe(resultado.doacao);
+    });
+  });
+
+  describe("doarComMensagem (MediatorDoacaoComMensagem)", () => {
+    test("realiza doação com sucesso: debita moedas, repassa dinheiro, conclui e notifica chat", () => {
+      const { servico, doador, criador, repositorioDoacoes } = criarCenario({
+        saldoDoador: 3000,
+      });
+
+      const resultado = servico.doarComMensagem(
         doador,
         criador,
         2000,
         "Excelente transmissão!",
       );
 
-      // Doação concluída
       expect(resultado.doacao.status).toBe(StatusTransacao.CONCLUIDA);
+      expect(resultado.doacao).toBeInstanceOf(DoacaoComMensagem);
       expect(resultado.notificacaoChatEnviada).toBe(true);
       expect(resultado.avisoChat).toBeUndefined();
-
-      // Débito no doador (3000 - 2000 = 1000 moedas virtuais)
       expect(doador.carteira.saldoMoedaVirtual).toBe(1000);
-
-      // Crédito de repasse no criador (2000 * 0.7 = R$ 14,00)
       expect(criador.carteira.saldoDinheiro.centavos).toBe(1400);
-
-      // Registro no histórico de ambas as carteiras
       expect(doador.carteira.historico).toContain(resultado.doacao);
       expect(criador.carteira.historico).toContain(resultado.doacao);
-
-      // Salvo no repositório
       expect(repositorioDoacoes.buscarPorId(resultado.doacao.id)).toBe(resultado.doacao);
     });
 
     test("rejeita doação para canal não monetizado (SQ02, SQ05)", () => {
-      const { servico, doador, criadorNaoMonetizado, repositorioDoacoes } = criarCenario({ saldoDoador: 1000 });
+      const { servico, doador, criadorNaoMonetizado, repositorioDoacoes } = criarCenario({
+        saldoDoador: 1000,
+      });
 
       expect(() =>
-        servico.processarDoacao(doador, criadorNaoMonetizado, 500, "Tentativa de doação"),
+        servico.doarComMensagem(doador, criadorNaoMonetizado, 500, "Tentativa de doação"),
       ).toThrow("não está habilitado a receber doações");
 
       expect(doador.carteira.saldoMoedaVirtual).toBe(1000);
@@ -66,16 +79,18 @@ describe("ServicoDoacao (Padrão GoF: Facade)", () => {
     test("rejeita doação quando origem e destino são o mesmo usuário", () => {
       const { servico, criador } = criarCenario({ saldoDoador: 1000 });
 
-      expect(() =>
-        servico.processarDoacao(criador, criador, 500, "Auto-doação"),
-      ).toThrow("não pode doar para o próprio canal");
+      expect(() => servico.doarComMensagem(criador, criador, 500, "Auto-doação")).toThrow(
+        "não pode doar para o próprio canal",
+      );
     });
 
-    test("rejeita doação por saldo de moeda virtual insuficiente, salvando transação cancelada", () => {
-      const { servico, doador, criador, repositorioDoacoes } = criarCenario({ saldoDoador: 300 });
+    test("rejeita doação por saldo insuficiente, salvando transação cancelada", () => {
+      const { servico, doador, criador, repositorioDoacoes } = criarCenario({
+        saldoDoador: 300,
+      });
 
       expect(() =>
-        servico.processarDoacao(doador, criador, 500, "Sem saldo suficiente"),
+        servico.doarComMensagem(doador, criador, 500, "Sem saldo suficiente"),
       ).toThrow("Saldo de moeda virtual insuficiente");
 
       expect(doador.carteira.saldoMoedaVirtual).toBe(300);
@@ -86,10 +101,11 @@ describe("ServicoDoacao (Padrão GoF: Facade)", () => {
       expect(doacoesSalvas[0]!.status).toBe(StatusTransacao.CANCELADA);
     });
 
-    test("desfaz o débito e cancela a doação se o crédito no destino falhar (rollback)", () => {
-      const { servico, doador, criador, repositorioDoacoes } = criarCenario({ saldoDoador: 1000 });
+    test("desfaz o débito e cancela a doação se o crédito no destino falhar", () => {
+      const { servico, doador, criador, repositorioDoacoes } = criarCenario({
+        saldoDoador: 1000,
+      });
 
-      // Simula falha forçada no destino alterando o comportamento do método adicionarDinheiro
       const carteiraOriginal = criador.carteira;
       Object.defineProperty(criador, "carteira", {
         value: {
@@ -103,7 +119,7 @@ describe("ServicoDoacao (Padrão GoF: Facade)", () => {
       });
 
       expect(() =>
-        servico.processarDoacao(doador, criador, 500, "Falha simulada"),
+        servico.doarComMensagem(doador, criador, 500, "Falha simulada"),
       ).toThrow("Falha no banco de dados durante o crédito");
 
       expect(doador.carteira.saldoMoedaVirtual).toBe(1000);
@@ -125,20 +141,20 @@ describe("ServicoDoacao (Padrão GoF: Facade)", () => {
         saldoDoador: 1000,
       });
 
-      const resultado = servico.processarDoacao(
+      const resultado = servico.doarComMensagem(
         doador,
         criador,
         500,
         "Mensagem mesmo com chat instável",
       );
 
-      // Doação e repasse permanecem válidos
       expect(resultado.doacao.status).toBe(StatusTransacao.CONCLUIDA);
       expect(resultado.notificacaoChatEnviada).toBe(false);
-      expect(resultado.avisoChat).toContain("chat falhou ao exibir o destaque: Chat indisponível");
-
+      expect(resultado.avisoChat).toContain(
+        "chat falhou ao exibir o destaque: Chat indisponível",
+      );
       expect(doador.carteira.saldoMoedaVirtual).toBe(500);
-      expect(criador.carteira.saldoDinheiro.centavos).toBe(350); // 500 * 0.7 = 350 centavos = R$ 3,50
+      expect(criador.carteira.saldoDinheiro.centavos).toBe(350);
       expect(repositorioDoacoes.buscarPorId(resultado.doacao.id)).toBe(resultado.doacao);
     });
   });
