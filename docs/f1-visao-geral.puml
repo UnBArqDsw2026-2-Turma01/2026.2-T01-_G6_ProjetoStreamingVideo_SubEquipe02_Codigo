@@ -1,6 +1,6 @@
 @startuml f1-visao-geral
 ' F1 · Recarga de moeda virtual — visão geral (Entrega 3, SubEquipe_02)
-' Fiel à branch feature/f1-recarga. Leitura na ordem da história:
+' Fiel ao código de src/f1-recarga na main. Leitura na ordem da história:
 '   ① modal com preços (Decorator) → ② checkout no meio escolhido (Adapter) → ③ aviso de pagamento (Proxy)
 skinparam classAttributeIconSize 0
 skinparam shadowing false
@@ -22,7 +22,8 @@ legend top right
   ① <b>Decorator</b> (quanto cobrar): camadas de preço no lugar de <i>Recarga.calcularValorTotal()</i> (Entrega 2).
   ② <b>Adapter</b> (por onde cobrar): Mercado Pago, Stripe e simulado atrás de <i>GatewayPagamento</i>.
      O espectador escolhe o meio; se ele estiver indisponível, o sistema oferece as alternativas (O07).
-  ③ <b>Proxy</b> (confiar no aviso): barra aviso falso (O14) e pagamento já creditado (O11).
+  ③ <b>Proxy</b> de proteção e de referência inteligente (confiar no aviso):
+     barra aviso falso (O14) e pagamento já creditado (O11).
 endlegend
 
 ' ===================================================================== Topo
@@ -54,17 +55,17 @@ package "Catálogo da plataforma" #F3E8FC {
     +PACOTES: Pacote[]
     +CONFIGURACAO_PRECO: ConfiguracaoPreco
   }
-  interface Pacote {
+  class Pacote <<dataType>> {
     +id: string
     +quantidadeMoedaVirtual: number
     +valorBase: Dinheiro
   }
-  interface ConfiguracaoPreco {
-    +descontoPercentual: number [0..1]
-    +taxaFixa: Dinheiro [0..1]
-    +aliquotaImposto: number [0..1]
+  class ConfiguracaoPreco <<dataType>> {
+    +descontoPercentual: number [0..1] {0 < valor < 100}
+    +taxaFixa: Dinheiro [0..1] {valor > 0}
+    +aliquotaImposto: number [0..1] {valor > 0}
   }
-  interface OfertaPacote {
+  class OfertaPacote <<dataType>> {
     +pacote: Pacote
     +precoOriginal: Dinheiro
     +precoPromocional: Dinheiro
@@ -82,6 +83,8 @@ package "① Decorator — quanto cobrar" #E8F4EA {
   }
   class PrecoPacote <<ConcreteComponent>> {
     -pacote: Pacote
+    +calcular(): Dinheiro
+    +descrever(): string
   }
   abstract class PrecoDecorator <<Decorator>> {
     #interno: Preco
@@ -90,12 +93,18 @@ package "① Decorator — quanto cobrar" #E8F4EA {
   }
   class ComDesconto <<ConcreteDecorator>> {
     -percentual: number
+    +calcular(): Dinheiro
+    +descrever(): string
   }
   class ComTaxaFixa <<ConcreteDecorator>> {
     -taxa: Dinheiro
+    +calcular(): Dinheiro
+    +descrever(): string
   }
   class ComImposto <<ConcreteDecorator>> {
     -aliquota: number
+    +calcular(): Dinheiro
+    +descrever(): string
   }
 }
 
@@ -104,6 +113,8 @@ package "② Adapter — por onde cobrar" #FFF4E0 {
     +nome: string
     +iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>
     +consultarPagamento(idPagamento: string): Promise<SituacaoPagamento>
+  }
+  interface ValidadorWebhook {
     +validarWebhook(notificacao: NotificacaoPagamento): boolean
   }
   class AdaptadorMercadoPago <<Adapter>> {
@@ -112,6 +123,9 @@ package "② Adapter — por onde cobrar" #FFF4E0 {
     -segredoWebhook: string
     -usarLinkSandbox: boolean
     +{static} conectar(accessToken: string, segredoWebhook: string): AdaptadorMercadoPago
+    +iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>
+    +consultarPagamento(idCheckout: string): Promise<SituacaoPagamento>
+    +validarWebhook(notificacao: NotificacaoPagamento): boolean
   }
   class AdaptadorStripe <<Adapter>> {
     +nome = "Stripe"
@@ -119,20 +133,32 @@ package "② Adapter — por onde cobrar" #FFF4E0 {
     -segredoWebhook: string
     -urlRetorno: string
     +{static} conectar(chaveSecreta: string, segredoWebhook: string, urlRetorno?: string): AdaptadorStripe
+    +iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>
+    +consultarPagamento(idCheckout: string): Promise<SituacaoPagamento>
+    +validarWebhook(notificacao: NotificacaoPagamento): boolean
   }
   class AdaptadorProcessadorSimulado <<Adapter>> {
     +nome: string
     -processador: ProcessadorSimulado
     -segredoWebhook: string
+    +iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>
+    +consultarPagamento(idPagamento: string): Promise<SituacaoPagamento>
+    +validarWebhook(notificacao: NotificacaoPagamento): boolean
   }
-  class "SDK Mercado Pago\n(Checkout Pro)" as SdkMP <<Adaptee>> {
-    +preference.create()
-    +preference.get()
-    +payment.search()
+  package "SDK mercadopago v3 (Checkout Pro)" as PkgMP #FFFFFF {
+    class Preference <<Adaptee>> {
+      +create(body: PreferenceRequest): Promise<PreferenceResponse>
+      +get(preferenceId: string): Promise<PreferenceResponse>
+    }
+    class Payment <<Adaptee>> {
+      +search(options: PaymentSearchOptions): Promise<PaymentSearch>
+    }
   }
-  class "SDK Stripe\n(Checkout Session)" as SdkStripe <<Adaptee>> {
-    +checkout.sessions.create()
-    +checkout.sessions.retrieve()
+  package "SDK stripe v23 (Checkout Session)" as PkgStripe #FFFFFF {
+    class "Checkout::Sessions" as StripeSessions <<Adaptee>> {
+      +create(params: SessionCreateParams): Promise<Session>
+      +retrieve(id: string): Promise<Session>
+    }
   }
   class ProcessadorSimulado <<Adaptee>> {
     +online: boolean
@@ -153,8 +179,8 @@ package "③ Proxy — confiar no aviso" #E3EEFC {
     +confirmar(notificacao: NotificacaoPagamento): Promise<ResultadoConfirmacao>
   }
   class ProxyConfirmacaoSegura <<Proxy>> {
-    -real: ConfirmadorPagamento
-    -gateway: GatewayPagamento
+    -real: ServicoConfirmacao
+    -validador: ValidadorWebhook
     -pagamentosProcessados: Set<string>
     +confirmar(notificacao: NotificacaoPagamento): Promise<ResultadoConfirmacao>
   }
@@ -176,22 +202,27 @@ package "Financeiro" {
 
 package "Domínio" {
   abstract class Transacao {
-    +id: string
-    +usuario: Usuario
-    +status: StatusTransacao
+    +id: string {readOnly}
+    +usuario: Usuario {readOnly}
+    -status: StatusTransacao
+    +<<get>> status(): StatusTransacao
     +estaPendente(): boolean
     +concluir(): void
     +cancelar(): void
   }
   class Recarga {
-    +quantidadeMoedaVirtual: number
-    +valor: Dinheiro
-    +composicaoPreco: string
-    +metodo: MetodoRecarga
-    +gatewayUtilizado: string [0..1]
-    +idCheckout: string [0..1]
-    +instrucoesPagamento: string [0..1]
-    +motivoCancelamento: string [0..1]
+    +quantidadeMoedaVirtual: number {readOnly}
+    +valor: Dinheiro {readOnly}
+    +composicaoPreco: string {readOnly}
+    +metodo: MetodoRecarga {readOnly}
+    -gatewayUtilizado: string [0..1]
+    -idCheckout: string [0..1]
+    -instrucoesPagamento: string [0..1]
+    -motivoCancelamento: string [0..1]
+    +<<get>> gatewayUtilizado(): string [0..1]
+    +<<get>> idCheckout(): string [0..1]
+    +<<get>> instrucoesPagamento(): string [0..1]
+    +<<get>> motivoCancelamento(): string [0..1]
     +registrarCheckout(gateway: string, idCheckout: string, instrucoesPagamento?: string): void
     +cancelarComMotivo(motivo: string): void
   }
@@ -200,20 +231,22 @@ package "Domínio" {
     PROCESSADOR_EXTERNO
   }
   class Usuario {
-    +id: string
-    +nome: string
-    +email: string
+    +id: string {readOnly}
+    +nome: string {readOnly}
+    +email: string {readOnly}
   }
   class Carteira {
-    +saldoMoedaVirtual: number
-    +saldoDinheiro: Dinheiro
+    -saldoMoedaVirtual: number
+    -saldoDinheiro: Dinheiro
+    +<<get>> saldoMoedaVirtual(): number
+    +<<get>> saldoDinheiro(): Dinheiro
     +adicionarMoedaVirtual(quantidade: number): void
     +deduzirDinheiro(valor: Dinheiro): boolean
     +registrarTransacao(transacao: Transacao): void
   }
   class Dinheiro <<value object>> {
-    +centavos: number
-    +moeda: string
+    +centavos: number {readOnly}
+    +moeda: string {readOnly}
   }
 }
 
@@ -232,11 +265,13 @@ PrecoDecorator <|-down- ComTaxaFixa
 PrecoDecorator <|-down- ComImposto
 
 ' ---- Adapter
+ValidadorWebhook <|-down- GatewayPagamento
 GatewayPagamento <|.down. AdaptadorMercadoPago
 GatewayPagamento <|.down. AdaptadorStripe
 GatewayPagamento <|.down. AdaptadorProcessadorSimulado
-AdaptadorMercadoPago -down-> SdkMP : traduz
-AdaptadorStripe -down-> SdkStripe : traduz
+AdaptadorMercadoPago -down-> Preference : traduz\n(sdk.preference)
+AdaptadorMercadoPago -down-> Payment : traduz\n(sdk.payment)
+AdaptadorStripe -down-> StripeSessions : traduz\n(sdk.checkout.sessions)
 AdaptadorProcessadorSimulado -down-> ProcessadorSimulado : traduz
 AdaptadorMercadoPago .down.> ErroGatewayIndisponivel : <<throw>>
 AdaptadorStripe .down.> ErroGatewayIndisponivel : <<throw>>
@@ -245,17 +280,17 @@ AdaptadorProcessadorSimulado .down.> ErroGatewayIndisponivel : <<throw>>
 ' ---- Proxy
 ConfirmadorPagamento <|.down. ProxyConfirmacaoSegura
 ConfirmadorPagamento <|.down. ServicoConfirmacao
-ProxyConfirmacaoSegura -up-> "1" ConfirmadorPagamento : real (delega se\nautêntico e inédito)
+ProxyConfirmacaoSegura -left-> "1" ServicoConfirmacao : real
 
 ' ---- Domínio
 Transacao <|-down- Recarga
-Recarga -left-> MetodoRecarga
-Transacao -left-> "1" Usuario
+Recarga -right-> MetodoRecarga
+Transacao -right-> "1" Usuario
 Usuario *-down- "1" Carteira
 
 ' ===================================================================== Ligações entre pacotes
 ' Topo
-RecargaController -left-> ServicoRecarga : ofertas, meios\ne recarregar
+RecargaController -right-> ServicoRecarga : ofertas, meios\ne recarregar
 ServicoRecarga -up-> "1..*" Pacote : vende
 ServicoRecarga -up-> "1" ConfiguracaoPreco : regras de preço
 ServicoRecarga .up.> OfertaPacote : <<create>>
@@ -267,18 +302,18 @@ ServicoRecarga .down.> ErroMeioPagamentoIndisponivel : <<throw>>
 RecargaController -down-> "1..*" ConfirmadorPagamento : ③ receberWebhook\n(um por gateway)
 
 ' Proxy → Adapter
-ProxyConfirmacaoSegura -right-> GatewayPagamento : validarWebhook (O14)
-ServicoConfirmacao -right-> GatewayPagamento : consultarPagamento
+ProxyConfirmacaoSegura -left-> ValidadorWebhook : validarWebhook (O14)
+ServicoConfirmacao -left-> GatewayPagamento : consultarPagamento
 
 ' Padrões → base
 ServicoConfirmacao -down-> ServicoFinanceiro : creditarMoedaVirtual
 ServicoConfirmacao .down.> Recarga : conclui
 ServicoRecarga .down.> Recarga : <<create>>
-ServicoFinanceiro .right.> Carteira : altera saldo
+ServicoFinanceiro .left.> Carteira : altera saldo
 
 ' Guias invisíveis de alinhamento
-Preco -[hidden]left-> GatewayPagamento
-GatewayPagamento -[hidden]left-> ConfirmadorPagamento
+Preco -[hidden]right-> GatewayPagamento
+GatewayPagamento -[hidden]right-> ConfirmadorPagamento
 ErroGatewayIndisponivel -[hidden]down-> Transacao
 ServicoConfirmacao -[hidden]down-> ServicoFinanceiro
 
@@ -296,13 +331,15 @@ note bottom of ComTaxaFixa
   Preço promocional = cadeia completa.calcular()
 end note
 
-note bottom of SdkMP
+note bottom of Preference
   <b>idCheckout por gateway</b>
   Mercado Pago: id da preferência; o pagamento é
   achado por payment.search pela external_reference.
   Stripe: id da sessão (expires_at = 30 min).
   O idPagamento do aviso e da consulta é esse idCheckout.
   Teste x produção vem da credencial usada.
+  O atributo sdk é uma interface de recorte que expõe
+  só essas operações; os testes injetam dublês.
 end note
 
 note bottom of ErroMeioPagamentoIndisponivel
@@ -313,7 +350,8 @@ note bottom of ErroMeioPagamentoIndisponivel
 end note
 
 note right of ProxyConfirmacaoSegura
-  <b>Proteção (O14)</b>: barra assinatura inválida.
+  <b>Proxy de proteção (O14)</b>: barra assinatura inválida;
+  só conhece o ValidadorWebhook do processador.
   <b>Referência inteligente (O11)</b>: barra pagamento
   já creditado; só guarda a chave quando credita.
 end note

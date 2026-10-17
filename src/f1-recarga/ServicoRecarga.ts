@@ -58,7 +58,7 @@ export class ServicoRecarga {
    * promocional (cadeia completa). O usuário fica no contrato para regras
    * futuras por espectador; hoje as regras são globais.
    */
-  consultarOfertas(_usuario: Usuario): OfertaPacote[] {
+  consultarOfertas(usuario: Usuario): OfertaPacote[] {
     return this.pacotes.map((pacote) => {
       const preco = this.montarPreco(pacote);
       return {

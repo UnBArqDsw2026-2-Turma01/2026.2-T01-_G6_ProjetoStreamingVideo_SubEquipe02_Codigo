@@ -1,0 +1,127 @@
+@startuml f1-proxy
+' F1 · Recarga — padrão Proxy (Entrega 3, SubEquipe_02)
+' Recorte da visão geral (f1-visao-geral.puml): confiar no aviso.
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam nodesep 90
+skinparam ranksep 70
+skinparam padding 4
+skinparam packageFontSize 14
+skinparam ArrowFontSize 11
+skinparam NoteBackgroundColor #FFFDE7
+hide empty members
+
+title F1 · Proxy — confirmação do pagamento
+
+package "Apresentação" {
+  class RecargaController <<Client>> {
+    -confirmadores: Map<string, ConfirmadorPagamento>
+    +receberWebhook(nomeGateway: string, notificacao: NotificacaoPagamento): Promise<ResultadoConfirmacao>
+  }
+}
+
+package "③ Proxy — confiar no aviso" #E3EEFC {
+  interface ConfirmadorPagamento <<Subject>> {
+    +confirmar(notificacao: NotificacaoPagamento): Promise<ResultadoConfirmacao>
+  }
+  class ProxyConfirmacaoSegura <<Proxy>> <<proteção + referência inteligente>> {
+    -real: ServicoConfirmacao
+    -validador: ValidadorWebhook
+    -pagamentosProcessados: Set<string>
+    +ProxyConfirmacaoSegura(real: ServicoConfirmacao, validador: ValidadorWebhook)
+    +confirmar(notificacao: NotificacaoPagamento): Promise<ResultadoConfirmacao>
+  }
+  class ServicoConfirmacao <<RealSubject>> {
+    -gateway: GatewayPagamento
+    -recargas: RepositorioEmMemoria<Recarga>
+    -financeiro: ServicoFinanceiro
+    +confirmar(notificacao: NotificacaoPagamento): Promise<ResultadoConfirmacao>
+  }
+  class ResultadoConfirmacao <<dataType>> {
+    +efeito: EfeitoConfirmacao
+    +motivo: string
+  }
+  enum EfeitoConfirmacao {
+    CREDITADO
+    AGUARDANDO
+    INCONSISTENTE
+    NAO_AUTENTICO
+    DUPLICADO
+  }
+}
+
+package "Colaboradores" {
+  interface ValidadorWebhook {
+    +validarWebhook(notificacao: NotificacaoPagamento): boolean
+  }
+  interface GatewayPagamento <<Target do Adapter>> {
+    +nome: string
+    +consultarPagamento(idPagamento: string): Promise<SituacaoPagamento>
+  }
+  class NotificacaoPagamento <<dataType>> {
+    +idEvento: string
+    +idPagamento: string
+    +recargaId: string
+    +assinatura: string
+  }
+  class ServicoFinanceiro {
+    +creditarMoedaVirtual(usuario: Usuario, quantidade: number): void
+  }
+  class Recarga {
+    +valor: Dinheiro {readOnly}
+    -gatewayUtilizado: string [0..1]
+    -idCheckout: string [0..1]
+    +<<get>> gatewayUtilizado(): string [0..1]
+    +<<get>> idCheckout(): string [0..1]
+    +estaPendente(): boolean
+    +concluir(): void
+  }
+}
+
+' ---- Proxy
+RecargaController -down-> "1..*" ConfirmadorPagamento : receberWebhook\n(um por gateway)
+ConfirmadorPagamento <|.down. ProxyConfirmacaoSegura
+ConfirmadorPagamento <|.down. ServicoConfirmacao
+ProxyConfirmacaoSegura -right-> "1" ServicoConfirmacao : real
+ConfirmadorPagamento .right.> ResultadoConfirmacao
+ResultadoConfirmacao -down-> EfeitoConfirmacao
+
+' ---- Colaboradores
+ProxyConfirmacaoSegura -down-> "1" ValidadorWebhook : validarWebhook (O14)
+ServicoConfirmacao -down-> "1" GatewayPagamento : consultarPagamento
+ServicoConfirmacao .down.> Recarga : conclui
+ServicoConfirmacao -down-> ServicoFinanceiro : creditarMoedaVirtual
+ValidadorWebhook <|-right- GatewayPagamento
+ValidadorWebhook .right.> NotificacaoPagamento
+
+' ---- Notas
+note left of ProxyConfirmacaoSegura
+  <b>Proxy de proteção (O14)</b>: confere se quem envia
+  o aviso tem direito de pedir o crédito (assinatura);
+  se não, NAO_AUTENTICO, sem chamar o real.
+  Depende só do ValidadorWebhook, não do gateway todo.
+  <b>Referência inteligente (O11)</b>: ação extra a cada
+  acesso; pagamento já creditado ou em andamento →
+  DUPLICADO. Reserva a chave antes de delegar e só a
+  mantém quando o efeito é CREDITADO. Há um Proxy
+  (e um conjunto) por gateway, montado com o validador
+  e o serviço real do mesmo gateway (montarRecarga).
+  Fora isso, repassa a requisição intacta ao real.
+end note
+
+note right of ServicoConfirmacao
+  <b>Só regra de negócio</b> (não sabe que há um Proxy):
+  consulta o processador,
+  confere recarga, gateway, checkout e valor pago;
+  conclui a recarga e só depois credita.
+  Pagamento pendente ou recusado → AGUARDANDO.
+end note
+
+note right of RecargaController
+  Mesma interface ConfirmadorPagamento:
+  o controller não sabe se fala com o
+  Proxy ou com o serviço real.
+end note
+@enduml

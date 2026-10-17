@@ -1,0 +1,133 @@
+@startuml f1-decorator
+' F1 · Recarga — padrão Decorator (Entrega 3, SubEquipe_02)
+' Recorte da visão geral (f1-visao-geral.puml): quanto cobrar.
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam nodesep 70
+skinparam ranksep 70
+skinparam padding 4
+skinparam packageFontSize 14
+skinparam ArrowFontSize 11
+skinparam NoteBackgroundColor #FFFDE7
+hide empty members
+
+title F1 · Decorator — preço do pacote de moeda virtual
+
+package "Serviços de Aplicação" {
+  class ServicoRecarga <<Client>> {
+    -pacotes: Pacote[]
+    -configuracaoPreco: ConfiguracaoPreco
+    +consultarOfertas(usuario: Usuario): OfertaPacote[]
+    +montarPreco(pacote: Pacote): Preco
+  }
+}
+
+package "Catálogo da plataforma" #F3E8FC {
+  class catalogo <<módulo>> {
+    +MOEDAS_POR_REAL = 20
+    +PACOTES: Pacote[]
+    +CONFIGURACAO_PRECO: ConfiguracaoPreco
+  }
+  class Pacote <<dataType>> {
+    +id: string
+    +quantidadeMoedaVirtual: number
+    +valorBase: Dinheiro
+  }
+  class ConfiguracaoPreco <<dataType>> {
+    +descontoPercentual: number [0..1] {0 < valor < 100}
+    +taxaFixa: Dinheiro [0..1] {valor > 0}
+    +aliquotaImposto: number [0..1] {valor > 0}
+  }
+  class OfertaPacote <<dataType>> {
+    +pacote: Pacote
+    +precoOriginal: Dinheiro
+    +precoPromocional: Dinheiro
+    +composicao: string
+  }
+}
+
+package "① Decorator — quanto cobrar" #E8F4EA {
+  interface Preco <<Component>> {
+    +calcular(): Dinheiro
+    +descrever(): string
+  }
+  class PrecoPacote <<ConcreteComponent>> {
+    -pacote: Pacote
+    +calcular(): Dinheiro
+    +descrever(): string
+  }
+  abstract class PrecoDecorator <<Decorator>> {
+    #interno: Preco
+    #PrecoDecorator(interno: Preco)
+    +calcular(): Dinheiro
+    +descrever(): string
+  }
+  class ComDesconto <<ConcreteDecorator>> {
+    -percentual: number
+    +calcular(): Dinheiro
+    +descrever(): string
+  }
+  class ComTaxaFixa <<ConcreteDecorator>> {
+    -taxa: Dinheiro
+    +calcular(): Dinheiro
+    +descrever(): string
+  }
+  class ComImposto <<ConcreteDecorator>> {
+    -aliquota: number
+    +calcular(): Dinheiro
+    +descrever(): string
+  }
+}
+
+package "Domínio" {
+  class Dinheiro <<value object>> {
+    +centavos: number {readOnly}
+    +moeda: string {readOnly}
+    +somar(outro: Dinheiro): Dinheiro
+    +subtrair(outro: Dinheiro): Dinheiro
+    +percentual(porcento: number): Dinheiro
+  }
+}
+
+' ---- Decorator
+Preco <|.down. PrecoPacote
+Preco <|.down. PrecoDecorator
+PrecoDecorator o-up-> "1" Preco : envolve
+PrecoDecorator <|-down- ComDesconto
+PrecoDecorator <|-down- ComTaxaFixa
+PrecoDecorator <|-down- ComImposto
+PrecoPacote -left-> "1" Pacote : preço base
+
+' ---- Cliente e catálogo
+ServicoRecarga .down.> Preco : monta a cadeia\ne calcula
+ServicoRecarga -left-> "1..*" Pacote : vende
+ServicoRecarga -left-> "1" ConfiguracaoPreco : regras de preço
+ServicoRecarga .left.> OfertaPacote : <<create>>
+catalogo -down-> "1..*" Pacote
+catalogo -down-> "1" ConfiguracaoPreco
+OfertaPacote -down-> "1" Pacote
+ComImposto .down.> Dinheiro
+
+' ---- Notas
+note right of ServicoRecarga
+  <b>montarPreco</b> monta a cadeia em ordem fixa
+  (desconto → taxa fixa → imposto, tudo em BRL);
+  cada camada só entra se estiver na configuração.
+end note
+
+note bottom of ComTaxaFixa
+  <b>Exemplo — pacote de 210 por R$ 10,00</b>
+  new ComImposto(new ComDesconto(new PrecoPacote(p10), 29), 5)
+  Preço original = PrecoPacote.calcular() = R$ 10,00
+  Preço promocional = cadeia completa.calcular() = R$ 7,46
+  descrever(): "pacote de 210 (R$ 10,00) → desconto de 29% → imposto de 5%"
+end note
+
+note bottom of catalogo
+  20 de moeda virtual por R$ 1, com bônus
+  progressivo de 0% (R$ 5) a 40% (R$ 1000).
+  Promoção vigente: 29% de desconto e 5% de imposto.
+end note
+@enduml

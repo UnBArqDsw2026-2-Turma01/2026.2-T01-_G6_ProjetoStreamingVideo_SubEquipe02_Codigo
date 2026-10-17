@@ -1,10 +1,16 @@
-import type { GatewayPagamento, NotificacaoPagamento } from "../pagamento";
+import type { NotificacaoPagamento, ValidadorWebhook } from "../pagamento";
 import { EfeitoConfirmacao, type ConfirmadorPagamento, type ResultadoConfirmacao } from "./ConfirmadorPagamento";
+import type { ServicoConfirmacao } from "./ServicoConfirmacao";
 
 /**
  * Proxy de proteção e de referência inteligente diante do `ServicoConfirmacao`.
  *
+ * Como no modelo clássico do GoF, o Proxy implementa o Subject (`ConfirmadorPagamento`)
+ * e guarda a referência ao RealSubject (`ServicoConfirmacao`), a quem repassa a
+ * requisição intacta quando ela é permitida.
+ *
  * 1. Proteção (O14): aviso com assinatura inválida não chega ao serviço real.
+ *    O Proxy só conhece o `ValidadorWebhook` do processador, não a cobrança nem a consulta.
  * 2. Referência inteligente (O11): pagamento já creditado não é processado de novo.
  *
  * A chave é o `idPagamento` do aviso, que contém o `idCheckout` da recarga
@@ -16,17 +22,17 @@ import { EfeitoConfirmacao, type ConfirmadorPagamento, type ResultadoConfirmacao
  * seria uma tabela com restrição de unicidade nessa chave.
  */
 export class ProxyConfirmacaoSegura implements ConfirmadorPagamento {
-  private readonly real: ConfirmadorPagamento;
-  private readonly gateway: GatewayPagamento;
+  private readonly real: ServicoConfirmacao;
+  private readonly validador: ValidadorWebhook;
   private readonly pagamentosProcessados = new Set<string>();
 
-  constructor(real: ConfirmadorPagamento, gateway: GatewayPagamento) {
+  constructor(real: ServicoConfirmacao, validador: ValidadorWebhook) {
     this.real = real;
-    this.gateway = gateway;
+    this.validador = validador;
   }
 
   async confirmar(notificacao: NotificacaoPagamento): Promise<ResultadoConfirmacao> {
-    if (!this.gateway.validarWebhook(notificacao)) {
+    if (!this.validador.validarWebhook(notificacao)) {
       return { efeito: EfeitoConfirmacao.NAO_AUTENTICO, motivo: `assinatura inválida no evento ${notificacao.idEvento}` };
     }
     const chave = notificacao.idPagamento;

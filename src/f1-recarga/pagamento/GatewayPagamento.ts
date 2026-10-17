@@ -51,11 +51,19 @@ export interface NotificacaoPagamento {
  * ou tenta o próximo gateway quando não escolheu (O07).
  * Qualquer outro erro é propagado como está.
  */
-export interface GatewayPagamento {
+export interface GatewayPagamento extends ValidadorWebhook {
   readonly nome: string;
   iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>;
   /** Recebe o `idCheckout` devolvido por `iniciarCheckout`. */
   consultarPagamento(idPagamento: string): Promise<SituacaoPagamento>;
-  /** Confere a assinatura do aviso com o segredo deste processador (O14). */
+}
+
+/**
+ * A única capacidade do processador de que o Proxy precisa: conferir a
+ * autenticidade do aviso (O14). Separada do `GatewayPagamento` para que o Proxy
+ * dependa só da verificação, e não da cobrança nem da consulta.
+ */
+export interface ValidadorWebhook {
+  /** Confere a assinatura do aviso com o segredo deste processador. */
   validarWebhook(notificacao: NotificacaoPagamento): boolean;
 }

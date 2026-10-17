@@ -4,6 +4,7 @@ export {
   type NotificacaoPagamento,
   type SessaoCheckout,
   type SituacaoPagamento,
+  type ValidadorWebhook,
 } from "./GatewayPagamento";
 export { ErroGatewayIndisponivel } from "./ErroGatewayIndisponivel";
 export { ErroMeioPagamentoIndisponivel } from "./ErroMeioPagamentoIndisponivel";

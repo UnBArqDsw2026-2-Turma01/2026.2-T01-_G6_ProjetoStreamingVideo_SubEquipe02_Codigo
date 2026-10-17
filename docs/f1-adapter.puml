@@ -1,0 +1,143 @@
+@startuml f1-adapter
+' F1 · Recarga — padrão Adapter (Entrega 3, SubEquipe_02)
+' Recorte da visão geral (f1-visao-geral.puml): por onde cobrar.
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam nodesep 60
+skinparam ranksep 70
+skinparam padding 4
+skinparam packageFontSize 14
+skinparam ArrowFontSize 11
+skinparam NoteBackgroundColor #FFFDE7
+hide empty members
+
+title F1 · Adapter — processadores de pagamento
+
+package "Clientes do Target" {
+  class ServicoRecarga <<Client>> {
+    -gateways: GatewayPagamento[]
+    +consultarMeiosPagamento(): string[]
+    +processarRecarga(usuario: Usuario, pacote: Pacote, metodo: MetodoRecarga, gatewayEscolhido?: string): Promise<Recarga>
+  }
+  class ProxyConfirmacaoSegura <<Client>> {
+    -validador: ValidadorWebhook
+  }
+  class ServicoConfirmacao <<Client>> {
+    -gateway: GatewayPagamento
+  }
+}
+
+package "② Adapter — por onde cobrar" #FFF4E0 {
+  interface GatewayPagamento <<Target>> {
+    +nome: string
+    +iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>
+    +consultarPagamento(idPagamento: string): Promise<SituacaoPagamento>
+  }
+  interface ValidadorWebhook {
+    +validarWebhook(notificacao: NotificacaoPagamento): boolean
+  }
+  class AdaptadorMercadoPago <<Adapter>> {
+    +nome = "MercadoPago"
+    -sdk: SdkMercadoPago
+    -segredoWebhook: string
+    -usarLinkSandbox: boolean
+    +{static} conectar(accessToken: string, segredoWebhook: string): AdaptadorMercadoPago
+    +iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>
+    +consultarPagamento(idCheckout: string): Promise<SituacaoPagamento>
+    +validarWebhook(notificacao: NotificacaoPagamento): boolean
+  }
+  class AdaptadorStripe <<Adapter>> {
+    +nome = "Stripe"
+    -sdk: SdkStripe
+    -segredoWebhook: string
+    -urlRetorno: string
+    +{static} conectar(chaveSecreta: string, segredoWebhook: string, urlRetorno?: string): AdaptadorStripe
+    +iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>
+    +consultarPagamento(idCheckout: string): Promise<SituacaoPagamento>
+    +validarWebhook(notificacao: NotificacaoPagamento): boolean
+  }
+  class AdaptadorProcessadorSimulado <<Adapter>> {
+    +nome: string
+    -processador: ProcessadorSimulado
+    -segredoWebhook: string
+    +iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>
+    +consultarPagamento(idPagamento: string): Promise<SituacaoPagamento>
+    +validarWebhook(notificacao: NotificacaoPagamento): boolean
+  }
+  class ErroGatewayIndisponivel <<exception>> {
+    +gateway: string
+  }
+  class ErroMeioPagamentoIndisponivel <<exception>> {
+    +gateway: string
+    +alternativas: string[]
+  }
+}
+
+package "SDK mercadopago v3 (Checkout Pro)" as PkgMP #F3F3F3 {
+  class Preference <<Adaptee>> {
+    +create(body: PreferenceRequest): Promise<PreferenceResponse>
+    +get(preferenceId: string): Promise<PreferenceResponse>
+  }
+  class Payment <<Adaptee>> {
+    +search(options: PaymentSearchOptions): Promise<PaymentSearch>
+  }
+}
+
+package "SDK stripe v23 (Checkout Session)" as PkgStripe #F3F3F3 {
+  class "Checkout::Sessions" as StripeSessions <<Adaptee>> {
+    +create(params: SessionCreateParams): Promise<Session>
+    +retrieve(id: string): Promise<Session>
+  }
+}
+
+package "Processador simulado" as PkgSim #F3F3F3 {
+  class ProcessadorSimulado <<Adaptee>> {
+    +online: boolean
+    +criarCobranca(centavos: number, ref: string): RespostaSimulada
+    +consultarStatus(id: string): string
+  }
+}
+
+' ---- Clientes → Target
+ServicoRecarga -down-> "1..*" GatewayPagamento : iniciarCheckout\nno meio escolhido
+ProxyConfirmacaoSegura -down-> "1" ValidadorWebhook : validarWebhook (O14)
+ServicoConfirmacao -down-> "1" GatewayPagamento : consultarPagamento
+ServicoRecarga .right.> ErroMeioPagamentoIndisponivel : <<throw>>
+
+' ---- Adapter
+ValidadorWebhook <|-left- GatewayPagamento
+GatewayPagamento <|.down. AdaptadorMercadoPago
+GatewayPagamento <|.down. AdaptadorStripe
+GatewayPagamento <|.down. AdaptadorProcessadorSimulado
+AdaptadorMercadoPago -down-> Preference : traduz\n(sdk.preference)
+AdaptadorMercadoPago -down-> Payment : traduz\n(sdk.payment)
+AdaptadorStripe -down-> StripeSessions : traduz\n(sdk.checkout.sessions)
+AdaptadorProcessadorSimulado -down-> ProcessadorSimulado : traduz
+GatewayPagamento .right.> ErroGatewayIndisponivel : <<throw>>
+
+' ---- Notas
+note right of ServicoRecarga
+  <b>O07</b>: com meio escolhido, o indisponível
+  cancela a recarga e devolve as alternativas
+  ao modal (não troca sem perguntar).
+  Sem escolha, tenta os gateways em ordem.
+end note
+
+note bottom of PkgMP
+  <b>idCheckout por gateway</b>
+  Mercado Pago: id da preferência; o pagamento é
+  achado por Payment.search pela external_reference.
+  Stripe: id da sessão (expires_at = 30 min).
+  O idPagamento do aviso e da consulta é esse idCheckout.
+  O atributo sdk é uma interface de recorte que expõe
+  só essas operações; os testes injetam dublês.
+end note
+
+note bottom of PkgSim
+  Código 503 → ErroGatewayIndisponivel;
+  texto "PAGO;recarga-1;746" → SituacaoPagamento.
+  Testes e demonstração sem internet.
+end note
+@enduml

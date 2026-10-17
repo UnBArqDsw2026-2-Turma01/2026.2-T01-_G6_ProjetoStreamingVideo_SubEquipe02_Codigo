@@ -3,9 +3,7 @@ import {
   EfeitoConfirmacao,
   MetodoRecarga,
   ProxyConfirmacaoSegura,
-  type ConfirmadorPagamento,
-  type NotificacaoPagamento,
-  type ResultadoConfirmacao,
+  ServicoConfirmacao,
 } from "../../src/f1-recarga";
 import { SEGREDO_A, SEGREDO_B, aviso, criarCenario } from "./cenario";
 
@@ -144,20 +142,17 @@ describe("Confirmação do pagamento (Proxy)", () => {
   });
 
   test("o Proxy não chama o serviço real para avisos barrados", async () => {
-    const chamadas: NotificacaoPagamento[] = [];
-    const real: ConfirmadorPagamento = {
-      confirmar: async (n): Promise<ResultadoConfirmacao> => {
-        chamadas.push(n);
-        return { efeito: EfeitoConfirmacao.CREDITADO, motivo: "ok" };
-      },
-    };
-    const { gatewayA } = criarCenario();
+    const { gatewayA, recargas, financeiro } = criarCenario();
+    const real = new ServicoConfirmacao(gatewayA, recargas, financeiro);
+    const confirmarReal = jest
+      .spyOn(real, "confirmar")
+      .mockResolvedValue({ efeito: EfeitoConfirmacao.CREDITADO, motivo: "ok" });
     const proxy = new ProxyConfirmacaoSegura(real, gatewayA);
 
     await proxy.confirmar(aviso("errado", "sim-1", "recarga-1"));
     await proxy.confirmar(aviso(SEGREDO_A, "sim-1", "recarga-1", "ev-1"));
     await proxy.confirmar(aviso(SEGREDO_A, "sim-1", "recarga-1", "ev-2"));
 
-    expect(chamadas.map((n) => n.idEvento)).toEqual(["ev-1"]);
+    expect(confirmarReal.mock.calls.map(([n]) => n.idEvento)).toEqual(["ev-1"]);
   });
 });
