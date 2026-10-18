@@ -23,11 +23,21 @@ describe("ServicoDoacao (Padrão GoF: Facade)", () => {
     });
   });
 
+  describe("colleagues expostos pela Facade", () => {
+    test("expõe as mesmas instâncias de financeiro e chat usadas no wiring", () => {
+      const { servico, financeiro, chat } = criarCenario();
+
+      expect(servico.financeiro).toBe(financeiro);
+      expect(servico.chat).toBe(chat);
+    });
+  });
+
   describe("doar (MediatorDoacao)", () => {
     test("realiza doação simples sem notificar o chat", () => {
-      const { servico, doador, criador, repositorioDoacoes } = criarCenario({
+      const { servico, doador, criador, repositorioDoacoes, chat } = criarCenario({
         saldoDoador: 3000,
       });
+      const exibirSpy = jest.spyOn(chat, "exibirMensagemDestacada");
 
       const resultado = servico.doar(doador, criador, 1000);
 
@@ -36,6 +46,21 @@ describe("ServicoDoacao (Padrão GoF: Facade)", () => {
       expect(doador.carteira.saldoMoedaVirtual).toBe(2000);
       expect(criador.carteira.saldoDinheiro.centavos).toBe(2000); // 1000 × R$ 0,02
       expect(repositorioDoacoes.buscarPorId(resultado.doacao.id)).toBe(resultado.doacao);
+      expect(exibirSpy).not.toHaveBeenCalled();
+    });
+
+    test("rejeita doação simples por saldo insuficiente, salvando transação cancelada", () => {
+      const { servico, doador, criador, repositorioDoacoes } = criarCenario({
+        saldoDoador: 100,
+      });
+
+      expect(() => servico.doar(doador, criador, 500)).toThrow(
+        "Saldo de moeda virtual insuficiente",
+      );
+
+      const [doacao] = repositorioDoacoes.listar();
+      expect(doacao!.status).toBe(StatusTransacao.CANCELADA);
+      expect(doacao).not.toBeInstanceOf(DoacaoComMensagem);
     });
   });
 
@@ -125,6 +150,18 @@ describe("ServicoDoacao (Padrão GoF: Facade)", () => {
       expect(doador.carteira.saldoMoedaVirtual).toBe(1000);
       const [doacaoCancelada] = repositorioDoacoes.listar();
       expect(doacaoCancelada!.status).toBe(StatusTransacao.CANCELADA);
+    });
+  });
+
+  describe("processarDoacao (compatibilidade)", () => {
+    test("equivale a doarComMensagem", () => {
+      const { servico, doador, criador } = criarCenario({ saldoDoador: 1000 });
+
+      const resultado = servico.processarDoacao(doador, criador, 500, "Compat");
+
+      expect(resultado.doacao).toBeInstanceOf(DoacaoComMensagem);
+      expect(resultado.doacao.status).toBe(StatusTransacao.CONCLUIDA);
+      expect(resultado.notificacaoChatEnviada).toBe(true);
     });
   });
 
