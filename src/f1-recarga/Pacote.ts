@@ -10,10 +10,17 @@ export interface Pacote {
 /** O que o modal de recarga mostra para cada pacote. */
 export interface OfertaPacote {
   readonly pacote: Pacote;
-  /** Preço do componente base (`PrecoPacote`), exibido riscado quando há promoção. */
+  /** Preço de tabela do componente base (`PrecoPacote`), sem taxa nem imposto. */
   readonly precoOriginal: Dinheiro;
+  /**
+   * Preço final fora da promoção: a cadeia sem a camada de desconto (com taxa e imposto).
+   * É o valor riscado no modal, para o percentual de desconto valer sobre ele.
+   */
+  readonly precoSemDesconto: Dinheiro;
   /** Preço da cadeia completa de decoradores. */
   readonly precoPromocional: Dinheiro;
+  /** Desconto aplicado a este pacote (progressivo ou geral), para o selo do modal. */
+  readonly descontoPercentual?: number;
   /** Descrição das camadas aplicadas, para transparência ao espectador. */
   readonly composicao: string;
 }

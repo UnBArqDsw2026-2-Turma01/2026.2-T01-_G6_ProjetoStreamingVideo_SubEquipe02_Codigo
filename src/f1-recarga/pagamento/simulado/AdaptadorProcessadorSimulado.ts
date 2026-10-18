@@ -46,6 +46,10 @@ export class AdaptadorProcessadorSimulado implements GatewayPagamento {
     return { idCheckout: resposta.protocolo, instrucoes: `pague o protocolo ${resposta.protocolo}` };
   }
 
+  async estaDisponivel(): Promise<boolean> {
+    return this.processador.online;
+  }
+
   async consultarPagamento(idPagamento: string): Promise<SituacaoPagamento> {
     const texto = this.processador.consultarStatus(idPagamento);
     if (texto === "FORA_DO_AR") {

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Entrega 3 - SubEquipe 02</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+  <header>
+    <h1>Entrega 3 - SubEquipe 02</h1>
+    <p>
+      Espectador: <b id="saldo-espectador">0</b> moedas
+      &nbsp;|&nbsp; Criador: <b id="saldo-criador">R$ 0,00</b>
+      <button type="button" id="reiniciar">Reiniciar</button>
+    </p>
+    <p class="velocidade">Velocidade: <span id="velocidades"></span></p>
+  </header>
+
+  <main>
+    <div class="coluna">
+      <section>
+        <h2>Recarga (F1)</h2>
+        <p class="rotulo">Pacote</p>
+        <div class="pacotes" id="pacotes"></div>
+        <div class="resumo" id="resumo" aria-live="polite"></div>
+
+        <label>Meio de pagamento
+          <select id="meio"></select>
+        </label>
+        <p class="nota">Fora do ar: <span id="fora-do-ar"></span></p>
+
+        <button type="button" id="comprar">Comprar</button>
+        <p class="erro" id="erro-recarga" hidden></p>
+        <div id="pedido"></div>
+      </section>
+
+      <section>
+        <h2>Doação (F2)</h2>
+        <label>Canal
+          <select id="canal"></select>
+        </label>
+        <p class="rotulo">Quantidade de moeda virtual</p>
+        <div class="valores" id="valores"></div>
+        <input id="quantidade" type="number" min="1" value="2000" placeholder="Outro valor" aria-label="Outro valor">
+        <p class="nota" id="faixa"></p>
+        <label>Mensagem (opcional)
+          <textarea id="mensagem" rows="3"></textarea>
+        </label>
+        <p class="nota" id="contador"></p>
+        <button type="button" id="doar">Doar</button>
+        <p class="erro" id="erro-doacao" hidden></p>
+      </section>
+
+      <section class="largo">
+        <h2>Notificações do criador</h2>
+        <ul id="notificacoes"></ul>
+      </section>
+    </div>
+
+    <section class="chat">
+      <h2>Chat (F3)</h2>
+      <ul id="fixadas"></ul>
+      <ul id="mensagens"></ul>
+      <form id="form-chat">
+        <input id="texto-chat" type="text" maxlength="200" placeholder="Escreva uma mensagem" autocomplete="off">
+        <button type="submit">Enviar</button>
+      </form>
+      <p class="erro" id="erro-chat" hidden></p>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,14 +1,30 @@
 import { GeradorId, RepositorioEmMemoria } from "../../src/compartilhado";
-import { Dinheiro, ErroDominio, StatusTransacao } from "../../src/dominio";
+import { Dinheiro, ErroDominio, StatusTransacao, Usuario } from "../../src/dominio";
+import { ServicoFinanceiro } from "../../src/financeiro";
 import {
+  AdaptadorProcessadorSimulado,
   ErroGatewayIndisponivel,
   ErroMeioPagamentoIndisponivel,
   MetodoRecarga,
   Recarga,
+  ProcessadorSimulado,
   ServicoRecarga,
+  montarRecarga,
   type GatewayPagamento,
 } from "../../src/f1-recarga";
 import { criarCenario, pacotes } from "./cenario";
+
+/** Três meios simulados (A, B, C), para os casos com mais de uma alternativa. */
+function cenarioComTresMeios() {
+  const usuarios = new RepositorioEmMemoria<Usuario>();
+  usuarios.salvar(new Usuario("usuario-1", "Espectador", "espectador@exemplo.com"));
+  const processadores = { A: new ProcessadorSimulado(), B: new ProcessadorSimulado(), C: new ProcessadorSimulado() };
+  const gateways = Object.entries(processadores).map(
+    ([letra, processador]) => new AdaptadorProcessadorSimulado(processador, `segredo-${letra}`, `Simulado-${letra}`),
+  );
+  const recargas = montarRecarga({ pacotes, configuracaoPreco: {}, gateways, financeiro: new ServicoFinanceiro(), usuarios });
+  return { ...recargas, processadores };
+}
 
 describe("ServicoRecarga", () => {
   describe("ofertas e preço (cliente do Decorator)", () => {
@@ -38,6 +54,41 @@ describe("ServicoRecarga", () => {
       expect(preco.calcular().centavos).toBe(1995);
       expect(preco.calcular().moeda).toBe("BRL");
       expect(preco.descrever()).toBe("pacote de 300 (R$ 20,00) → desconto de 10% → taxa de R$ 1,00 → imposto de 5%");
+    });
+  });
+
+  describe("desconto progressivo", () => {
+    const progressivo = {
+      descontoPercentual: 5,
+      descontosProgressivos: [
+        { aPartirDe: Dinheiro.deReais(20), percentual: 10 },
+        { aPartirDe: Dinheiro.deReais(60), percentual: 30 },
+      ],
+    };
+
+    test("cada pacote recebe a maior faixa que o valor de tabela alcança", () => {
+      const { servico, espectador } = criarCenario(progressivo);
+      const [p300, p1000] = servico.consultarOfertas(espectador);
+
+      expect(p300!.descontoPercentual).toBe(10);
+      expect(p300!.precoPromocional.centavos).toBe(1800); // R$ 20 − 10%
+      expect(p1000!.descontoPercentual).toBe(30);
+      expect(p1000!.precoPromocional.centavos).toBe(4200); // R$ 60 − 30%
+      expect(p1000!.composicao).toBe("pacote de 1000 (R$ 60,00) → desconto de 30%");
+    });
+
+    test("a ordem das faixas na configuração não importa", () => {
+      const invertido = { ...progressivo, descontosProgressivos: [...progressivo.descontosProgressivos].reverse() };
+      const { servico, espectador } = criarCenario(invertido);
+      expect(servico.consultarOfertas(espectador).map((o) => o.descontoPercentual)).toEqual([10, 30]);
+    });
+
+    test("pacote abaixo de todas as faixas usa o desconto geral", () => {
+      const { servico, espectador } = criarCenario({
+        descontoPercentual: 5,
+        descontosProgressivos: [{ aPartirDe: Dinheiro.deReais(60), percentual: 30 }],
+      });
+      expect(servico.consultarOfertas(espectador).map((o) => o.descontoPercentual)).toEqual([5, 30]);
     });
   });
 
@@ -85,6 +136,7 @@ describe("ServicoRecarga", () => {
           throw new Error("não usado");
         },
         validarWebhook: () => false,
+        estaDisponivel: async () => true,
       };
       const recargas = new RepositorioEmMemoria<Recarga>();
       const servico = new ServicoRecarga({
@@ -115,14 +167,59 @@ describe("ServicoRecarga", () => {
       expect(recarga.gatewayUtilizado).toBe("Simulado-B");
     });
 
-    test("meio escolhido fora do ar: não troca sozinho; cancela e devolve as alternativas", async () => {
-      const { controller, processadorB, recargas } = criarCenario();
+    test("meio escolhido fora do ar e um único outro disponível: segue nele automaticamente", async () => {
+      const { controller, processadorB } = criarCenario();
+      processadorB.online = false;
+
+      const recarga = await controller.recarregar("usuario-1", "p300", MetodoRecarga.PROCESSADOR_EXTERNO, "Simulado-B");
+
+      expect(recarga.status).toBe(StatusTransacao.PENDENTE);
+      expect(recarga.gatewayUtilizado).toBe("Simulado-A");
+    });
+
+    test("meio escolhido fora do ar e vários disponíveis: cancela e devolve só os que respondem", async () => {
+      const { controller, processadores, recargas } = cenarioComTresMeios();
+      processadores.A.online = false;
+
+      const tentativa = controller.recarregar("usuario-1", "p300", MetodoRecarga.PROCESSADOR_EXTERNO, "Simulado-A");
+
+      await expect(tentativa).rejects.toBeInstanceOf(ErroMeioPagamentoIndisponivel);
+      await expect(tentativa).rejects.toMatchObject({ gateway: "Simulado-A", alternativas: ["Simulado-B", "Simulado-C"] });
+      const [recarga] = recargas.listar();
+      expect(recarga!.status).toBe(StatusTransacao.CANCELADA);
+      expect(recarga!.gatewayUtilizado).toBeUndefined();
+    });
+
+    test("as alternativas não incluem meios que também estão fora do ar", async () => {
+      const { controller, processadores } = cenarioComTresMeios();
+      processadores.A.online = false;
+      processadores.B.online = false;
+
+      // Sobra só o C: não há o que perguntar, a recarga segue nele.
+      const recarga = await controller.recarregar("usuario-1", "p300", MetodoRecarga.PROCESSADOR_EXTERNO, "Simulado-A");
+      expect(recarga.gatewayUtilizado).toBe("Simulado-C");
+    });
+
+    test("todos fora do ar: cancela e avisa que não há outro meio", async () => {
+      const { controller, processadorA, processadorB, recargas } = criarCenario();
+      processadorA.online = false;
       processadorB.online = false;
 
       const tentativa = controller.recarregar("usuario-1", "p300", MetodoRecarga.PROCESSADOR_EXTERNO, "Simulado-B");
 
-      await expect(tentativa).rejects.toBeInstanceOf(ErroMeioPagamentoIndisponivel);
-      await expect(tentativa).rejects.toMatchObject({ gateway: "Simulado-B", alternativas: ["Simulado-A"] });
+      await expect(tentativa).rejects.toMatchObject({ gateway: "Simulado-B", alternativas: [] });
+      expect(recargas.listar()[0]!.status).toBe(StatusTransacao.CANCELADA);
+    });
+
+    test("o único disponível falha ao criar o checkout: cancela sem alternativas", async () => {
+      const { controller, processadorB, gatewayA, recargas } = criarCenario();
+      processadorB.online = false;
+      // Diz que está disponível, mas cai no momento de criar a cobrança.
+      jest.spyOn(gatewayA, "iniciarCheckout").mockRejectedValue(new ErroGatewayIndisponivel("Simulado-A", "caiu agora"));
+
+      const tentativa = controller.recarregar("usuario-1", "p300", MetodoRecarga.PROCESSADOR_EXTERNO, "Simulado-B");
+
+      await expect(tentativa).rejects.toMatchObject({ gateway: "Simulado-B", alternativas: [] });
       const [recarga] = recargas.listar();
       expect(recarga!.status).toBe(StatusTransacao.CANCELADA);
       expect(recarga!.gatewayUtilizado).toBeUndefined();

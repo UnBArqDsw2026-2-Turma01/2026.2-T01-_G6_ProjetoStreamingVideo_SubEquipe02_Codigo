@@ -12,6 +12,13 @@ describe("AdaptadorProcessadorSimulado", () => {
     return { processador, adaptador: new AdaptadorProcessadorSimulado(processador, "segredo-sim") };
   };
 
+  test("está disponível enquanto o processador está no ar", async () => {
+    const { processador, adaptador } = criar();
+    expect(await adaptador.estaDisponivel()).toBe(true);
+    processador.online = false;
+    expect(await adaptador.estaDisponivel()).toBe(false);
+  });
+
   test("cria a cobrança e devolve o protocolo como id do checkout", async () => {
     const { adaptador } = criar();
     const sessao = await adaptador.iniciarCheckout(Dinheiro.deCentavos(1491), "recarga-1");

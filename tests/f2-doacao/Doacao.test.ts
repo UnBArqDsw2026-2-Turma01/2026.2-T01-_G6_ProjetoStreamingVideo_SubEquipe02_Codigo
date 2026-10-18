@@ -1,4 +1,4 @@
-import { ErroDominio, StatusTransacao, Usuario } from "../../src/dominio";
+import { Dinheiro, ErroDominio, StatusTransacao, Usuario } from "../../src/dominio";
 import { Doacao, DoacaoComMensagem } from "../../src/f2-doacao";
 
 const criarUsuarios = () => ({
@@ -16,21 +16,24 @@ describe("Doacao", () => {
     expect(doacao.doador).toBe(doador);
     expect(doacao.criador).toBe(criador);
     expect(doacao.quantidadeMoedaVirtual).toBe(2000);
-    expect(doacao.valorRepasse.centavos).toBe(1400);
+    expect(doacao.valorRepasse.centavos).toBe(4000); // 2000 × R$ 0,02
     expect(doacao.valorRepasse.moeda).toBe("BRL");
   });
 
-  test("calcula repasse com taxa personalizada", () => {
+  test("uma única moeda repassa R$ 0,02, sem arredondamento", () => {
     const { doador, criador } = criarUsuarios();
-    const doacao = new Doacao("doa-2", doador, criador, 1000, 0.8);
-    expect(doacao.valorRepasse.centavos).toBe(800);
+    expect(new Doacao("doa-1m", doador, criador, 1).valorRepasse.centavos).toBe(2);
   });
 
-  test("rejeita taxa de repasse inválida", () => {
+  test("calcula repasse com valor por moeda personalizado", () => {
     const { doador, criador } = criarUsuarios();
-    expect(() => new Doacao("d", doador, criador, 500, 0)).toThrow(ErroDominio);
-    expect(() => new Doacao("d", doador, criador, 500, -0.5)).toThrow(ErroDominio);
-    expect(() => new Doacao("d", doador, criador, 500, 1.5)).toThrow(ErroDominio);
+    const doacao = new Doacao("doa-2", doador, criador, 1000, Dinheiro.deCentavos(3));
+    expect(doacao.valorRepasse.centavos).toBe(3000);
+  });
+
+  test("rejeita repasse por moeda zerado", () => {
+    const { doador, criador } = criarUsuarios();
+    expect(() => new Doacao("d", doador, criador, 500, Dinheiro.zero())).toThrow(ErroDominio);
   });
 
   test("rejeita quantidade não positiva", () => {
@@ -63,7 +66,7 @@ describe("DoacaoComMensagem", () => {
 
     expect(doacao.mensagem).toBe("Parabéns pela live!");
     expect(doacao.faixa.codigo).toBe("FAIXA_3");
-    expect(doacao.valorRepasse.centavos).toBe(1400);
+    expect(doacao.valorRepasse.centavos).toBe(4000);
   });
 
   test("rejeita mensagem vazia ou só espaços", () => {

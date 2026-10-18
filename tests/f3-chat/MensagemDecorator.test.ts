@@ -16,6 +16,7 @@ describe("MensagemBase (ConcreteComponent)", () => {
     const mensagem = base();
     expect(mensagem.cabecalho()).toBe("Espectador · 2000 de moeda virtual");
     expect(mensagem.texto()).toBe("Valeu pela live!");
+    expect(mensagem.cor()).toBeNull();
     expect(mensagem.tempoFixacaoMin()).toBe(0);
     expect(mensagem.descrever()).toBe("mensagem");
   });
@@ -33,6 +34,12 @@ describe("ComFaixaCor", () => {
     expect(mensagem.cabecalho()).toBe("[LARANJA] Espectador · 2000 de moeda virtual");
     expect(mensagem.texto()).toBe("Valeu pela live!");
     expect(mensagem.tempoFixacaoMin()).toBe(0);
+  });
+
+  test("define a cor da mensagem, que as camadas de fora repassam", () => {
+    expect(new ComFaixaCor(base(), "LARANJA").cor()).toBe("LARANJA");
+    expect(new ComFixacao(new ComFaixaCor(base(), "ROSA"), 30).cor()).toBe("ROSA");
+    expect(new ComFixacao(base(), 30).cor()).toBeNull();
   });
 
   test("recusa cor vazia", () => {

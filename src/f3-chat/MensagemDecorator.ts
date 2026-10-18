@@ -20,6 +20,10 @@ export abstract class MensagemDecorator implements MensagemDestacada {
     return this.interna.texto();
   }
 
+  cor(): string | null {
+    return this.interna.cor();
+  }
+
   tempoFixacaoMin(): number {
     return this.interna.tempoFixacaoMin();
   }

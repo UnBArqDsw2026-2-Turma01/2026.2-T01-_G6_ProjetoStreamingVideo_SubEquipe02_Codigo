@@ -17,7 +17,7 @@ type SessoesCheckout = Stripe["checkout"]["sessions"];
  * Só as operações usadas aqui, para os testes poderem trocar a API por dublês.
  */
 export interface SdkStripe {
-  readonly checkout: { readonly sessions: Pick<SessoesCheckout, "create" | "retrieve"> };
+  readonly checkout: { readonly sessions: Pick<SessoesCheckout, "create" | "retrieve" | "list"> };
 }
 
 /** Página para onde o Stripe manda o espectador depois de pagar (o front-end, quando existir). */
@@ -76,6 +76,16 @@ export class AdaptadorStripe implements GatewayPagamento {
       }),
     );
     return { idCheckout: sessao.id, instrucoes: sessao.url ?? "" };
+  }
+
+  /** Lista uma sessão só: responde rápido e não cria nada. */
+  async estaDisponivel(): Promise<boolean> {
+    try {
+      await this.sdk.checkout.sessions.list({ limit: 1 });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async consultarPagamento(idCheckout: string): Promise<SituacaoPagamento> {

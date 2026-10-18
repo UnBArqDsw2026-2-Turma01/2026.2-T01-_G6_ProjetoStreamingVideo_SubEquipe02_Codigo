@@ -43,11 +43,11 @@ async function executar(): Promise<void> {
   const { controller } = montarRecarga({ gateways: [gateway], financeiro: new ServicoFinanceiro(), usuarios });
 
   console.log(
-    `1. [Decorator] Consultando ofertas com desconto (${CONFIGURACAO_PRECO.descontoPercentual}%) e imposto (${CONFIGURACAO_PRECO.aliquotaImposto}%):`,
+    `1. [Decorator] Consultando ofertas com desconto progressivo e imposto (${CONFIGURACAO_PRECO.aliquotaImposto}%):`,
   );
   for (const oferta of controller.consultarOfertas(espectador.id)) {
     console.log(
-      `   • Pacote de ${oferta.pacote.quantidadeMoedaVirtual} moedas: de ${oferta.precoOriginal.formatar()} por ${oferta.precoPromocional.formatar()}`,
+      `   • Pacote de ${oferta.pacote.quantidadeMoedaVirtual} moedas: de ${oferta.precoSemDesconto.formatar()} por ${oferta.precoPromocional.formatar()}`,
     );
     console.log(`     Composição: ${oferta.composicao}`);
   }

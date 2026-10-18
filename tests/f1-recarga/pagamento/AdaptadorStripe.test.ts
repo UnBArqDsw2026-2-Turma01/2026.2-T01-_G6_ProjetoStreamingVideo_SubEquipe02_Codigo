@@ -76,6 +76,14 @@ describe("AdaptadorStripe", () => {
     );
   });
 
+  test("está disponível quando a API responde; indisponível quando falha, sem lançar", async () => {
+    const { sdk, adaptador } = criar();
+    expect(await adaptador.estaDisponivel()).toBe(true);
+    sdk.proximoErro = new Stripe.errors.StripeConnectionError({ message: "ECONNRESET" });
+    expect(await adaptador.estaDisponivel()).toBe(false);
+    expect(sdk.sessoes.size).toBe(0); // a verificação não cria cobrança
+  });
+
   test("erro de requisição é propagado como está", async () => {
     const { adaptador } = criar();
     await expect(adaptador.consultarPagamento("cs_inexistente")).rejects.toMatchObject({ statusCode: 404 });

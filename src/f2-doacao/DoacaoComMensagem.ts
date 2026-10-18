@@ -1,4 +1,4 @@
-import { ErroDominio, type Usuario } from "../dominio";
+import { ErroDominio, type Dinheiro, type Usuario } from "../dominio";
 import { Doacao } from "./Doacao";
 import { FaixaDestaque, type PropriedadesFaixa } from "./FaixaDestaque";
 
@@ -16,8 +16,7 @@ export class DoacaoComMensagem extends Doacao {
     criador: Usuario,
     quantidadeMoedaVirtual: number,
     mensagem: string,
-    taxaRepasse = Doacao.TAXA_REPASSE_PADRAO,
-    moeda = "BRL",
+    repassePorMoeda: Dinheiro = Doacao.REPASSE_POR_MOEDA_PADRAO,
   ) {
     const faixa = FaixaDestaque.paraQuantidade(quantidadeMoedaVirtual);
 
@@ -30,7 +29,7 @@ export class DoacaoComMensagem extends Doacao {
       );
     }
 
-    super(id, doador, criador, quantidadeMoedaVirtual, taxaRepasse, moeda);
+    super(id, doador, criador, quantidadeMoedaVirtual, repassePorMoeda);
     this.mensagem = mensagem;
     this.faixa = faixa;
   }

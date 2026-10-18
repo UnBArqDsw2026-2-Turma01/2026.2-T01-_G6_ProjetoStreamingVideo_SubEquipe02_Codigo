@@ -1,0 +1,126 @@
+body {
+  margin: 0;
+  padding: 16px 24px;
+  font: 15px/1.4 system-ui, sans-serif;
+  color: #222;
+  background: #f4f4f4;
+}
+
+header { display: flex; align-items: baseline; gap: 24px; margin-bottom: 16px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 16px; margin: 0 0 10px; }
+header p { margin: 0; }
+header button { margin-left: 12px; }
+header .velocidade { margin-left: auto; }
+.velocidade button { margin: 0 0 0 4px; padding: 3px 10px; background: #fff; border: 1px solid #aaa; border-radius: 4px; }
+.velocidade button[aria-pressed="true"] { background: #222; border-color: #222; color: #fff; }
+
+main { display: grid; grid-template-columns: 1fr 400px; gap: 16px; align-items: start; }
+.coluna { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.largo { grid-column: 1 / -1; }
+
+section { background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 14px; }
+label { display: block; margin-bottom: 8px; }
+select, input, textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 6px; font: inherit; }
+button { font: inherit; padding: 5px 12px; cursor: pointer; }
+
+.rotulo { margin: 0 0 4px; }
+.nota { color: #666; font-size: 13px; margin: 0 0 10px; }
+.rotulo .nota { margin: 0; }
+.nota label { display: inline; margin: 0 10px 0 4px; }
+.nota input { display: inline; width: auto; margin: 0 4px 0 0; }
+.erro { color: #c0392b; margin: 8px 0 0; }
+
+/* Recarga */
+.pacotes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
+.pacote {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 6px 2px; background: #fff; border: 1px solid #ccc; border-radius: 4px; line-height: 1.25;
+}
+.pacote[aria-pressed="true"] { border-color: #2a62c9; box-shadow: inset 0 0 0 1px #2a62c9; background: #f2f6fd; }
+.pacote { position: relative; }
+.resumo { margin: 0 0 12px; padding: 8px 10px; border: 1px solid #e2e2e2; border-radius: 4px; font-size: 14px; }
+.resumo .linha { display: flex; justify-content: space-between; gap: 8px; }
+.resumo .linha span:last-child { white-space: nowrap; }
+.resumo .desconto { color: #16825a; }
+.resumo .total { margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e2e2; font-weight: bold; }
+.resumo .imposto { margin: 4px 0 0; text-align: right; }
+.pacote .moedas { font-weight: bold; }
+.pacote .desconto-pacote {
+  position: absolute; top: -7px; right: -4px; padding: 0 4px; border-radius: 3px;
+  background: #16825a; color: #fff; font-size: 10px; font-weight: bold; line-height: 15px;
+}
+.pacote .unidade, .pacote s { font-size: 12px; color: #666; }
+
+.pedido { margin-top: 12px; padding: 10px; border-radius: 4px; background: #f4f4f4; }
+.pedido p { margin: 0 0 6px; }
+.pedido p:last-child { margin-bottom: 0; }
+.pedido.concluido { background: #e7f5ee; color: #11603f; }
+.pedido .troca { color: #7a5a00; }
+.checkout { margin: 10px 0 8px; }
+.checkout .nota { margin: 6px 0 0; }
+.botao-pagar {
+  display: inline-block; padding: 8px 18px; border-radius: 4px;
+  background: #2a62c9; color: #fff; font-weight: bold; text-decoration: none;
+}
+.botao-pagar:hover { background: #1f4fa8; }
+.botao-pagar:focus-visible { outline: 2px solid #2a62c9; outline-offset: 2px; }
+.pedido .selo {
+  display: inline-block; padding: 1px 8px; border-radius: 10px;
+  background: #fff3cd; color: #7a5a00; font-size: 12px; font-weight: bold;
+}
+.pedido.pendente .selo::before {
+  content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%;
+  background: currentColor; vertical-align: 1px; animation: pulsar 1.2s ease-in-out infinite;
+}
+@keyframes pulsar { 50% { opacity: 0.2; } }
+@media (prefers-reduced-motion: reduce) { .pedido.pendente .selo::before { animation: none; } }
+
+/* Doação */
+.valores { display: flex; gap: 6px; margin-bottom: 6px; }
+.valor { flex: 1; padding: 4px 0; background: #fff; border: 2px solid var(--cor); border-radius: 4px; }
+.valor[aria-pressed="true"] { background: var(--cor); color: #fff; }
+#quantidade { margin: 0 0 6px; }
+textarea:disabled { background: #eee; }
+
+/* Notificações do criador */
+#notificacoes { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow-y: auto; }
+#notificacoes li { padding: 6px 0; border-top: 1px solid #eee; }
+#notificacoes li:first-child { border-top: 0; }
+#notificacoes .nota { margin: 0; }
+
+/* Chat */
+.chat { display: flex; flex-direction: column; height: calc(100vh - 110px); box-sizing: border-box; }
+#mensagens, #fixadas { list-style: none; margin: 0; padding: 0; }
+#mensagens { flex: 1; overflow-y: auto; }
+#mensagens li { padding: 4px 0; }
+#mensagens li.destacada { padding: 6px 8px; }
+#form-chat { display: flex; gap: 6px; margin-top: 10px; }
+#form-chat input { margin: 0; }
+
+.destacada { margin: 4px 0; border-radius: 4px; color: #fff; background: var(--cor, #777); }
+.destacada .autor { font-size: 13px; }
+
+/* Fixadas: compactas no topo; o fundo escurece conforme o tempo passa e o hover mostra a mensagem inteira. */
+#fixadas { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; position: relative; z-index: 2; }
+#fixadas:not(:empty) { border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 8px; }
+.fixada {
+  position: relative; display: flex; gap: 6px; max-width: 100%; box-sizing: border-box;
+  padding: 2px 10px; border-radius: 999px; font-size: 13px; white-space: nowrap; color: #fff; cursor: default;
+  background: linear-gradient(to right, var(--cor) var(--restante), color-mix(in srgb, var(--cor) 65%, #000) var(--restante));
+}
+.fixada .trecho { overflow: hidden; text-overflow: ellipsis; max-width: 160px; opacity: 0.9; }
+.fixada .completa {
+  display: none; position: absolute; top: calc(100% + 4px); left: 0; width: 300px;
+  padding: 8px 10px; border-radius: 6px; white-space: normal; background: var(--cor);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.fixada:hover { z-index: 1; }
+.fixada:hover .completa { display: block; }
+
+/* Cores das faixas de destaque (SC01) */
+.AZUL { --cor: #2a62c9; }
+.VERDE { --cor: #16825a; }
+.LARANJA { --cor: #c2610c; }
+.ROSA { --cor: #c13a7a; }
+.VERMELHO { --cor: #c62828; }

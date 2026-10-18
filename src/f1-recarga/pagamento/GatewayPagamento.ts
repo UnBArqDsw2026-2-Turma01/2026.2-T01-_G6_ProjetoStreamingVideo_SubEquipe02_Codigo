@@ -56,6 +56,11 @@ export interface GatewayPagamento extends ValidadorWebhook {
   iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>;
   /** Recebe o `idCheckout` devolvido por `iniciarCheckout`. */
   consultarPagamento(idPagamento: string): Promise<SituacaoPagamento>;
+  /**
+   * Verifica, sem criar cobrança, se o processador consegue atender agora.
+   * Usado para oferecer só alternativas que funcionam (O07). Nunca lança: falha é `false`.
+   */
+  estaDisponivel(): Promise<boolean>;
 }
 
 /**

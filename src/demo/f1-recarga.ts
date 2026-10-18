@@ -2,8 +2,8 @@
  * Demonstração da F1 · Recarga de moeda virtual (Decorator, Adapter e Proxy).
  *
  * Usa dois processadores simulados, para rodar sem internet e sem credenciais:
- * o espectador escolhe o primeiro, que está fora do ar, recebe as alternativas
- * e escolhe o segundo (O07 com a escolha do espectador).
+ * o espectador escolhe o primeiro, que está fora do ar; como o segundo é o único
+ * disponível, o pedido segue nele (O07 com a escolha do espectador).
  *
  * Executar sozinha: npx tsx src/demo/f1-recarga.ts
  */
@@ -12,7 +12,6 @@ import { Usuario } from "../dominio";
 import { ServicoFinanceiro } from "../financeiro";
 import {
   AdaptadorProcessadorSimulado,
-  ErroMeioPagamentoIndisponivel,
   MetodoRecarga,
   ProcessadorSimulado,
   assinarNotificacao,
@@ -46,22 +45,19 @@ export async function demonstrarRecarga(espectador: Usuario, financeiro: Servico
   console.log("  [Decorator] Modal de moeda virtual:");
   for (const oferta of controller.consultarOfertas(espectador.id)) {
     console.log(
-      `    ${oferta.pacote.quantidadeMoedaVirtual} de moeda virtual: de ${oferta.precoOriginal.formatar()} por ${oferta.precoPromocional.formatar()}`,
+      `    ${oferta.pacote.quantidadeMoedaVirtual} de moeda virtual: de ${oferta.precoSemDesconto.formatar()} por ${oferta.precoPromocional.formatar()}`,
     );
     console.log(`      composição: ${oferta.composicao}`);
   }
 
   console.log("\n  [Adapter] Espectador compra o pacote de R$ 10 pelo processador externo:");
   console.log(`    Meios oferecidos no modal: ${controller.consultarMeiosPagamento().join(", ")}`);
-  console.log("    Escolhe Simulado-A, que está fora do ar.");
-  try {
-    await controller.recarregar(espectador.id, "p10", MetodoRecarga.PROCESSADOR_EXTERNO, "Simulado-A");
-  } catch (erro) {
-    if (!(erro instanceof ErroMeioPagamentoIndisponivel)) throw erro;
-    console.log(`    ${erro.message}`);
+  const escolhido = gatewayA.nome; // fora do ar
+  console.log(`    Escolhe ${escolhido}, que está fora do ar.`);
+  const recarga = await controller.recarregar(espectador.id, "p10", MetodoRecarga.PROCESSADOR_EXTERNO, escolhido);
+  if (recarga.gatewayUtilizado !== escolhido) {
+    console.log(`    ${escolhido} indisponível; ${recarga.gatewayUtilizado} é o único meio disponível, e o pedido segue nele.`);
   }
-  console.log("    Escolhe Simulado-B.");
-  const recarga = await controller.recarregar(espectador.id, "p10", MetodoRecarga.PROCESSADOR_EXTERNO, "Simulado-B");
   console.log(
     `    ${recarga.id} ${recarga.status}: ${recarga.valor.formatar()} no ${recarga.gatewayUtilizado} (${recarga.instrucoesPagamento})`,
   );

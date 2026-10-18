@@ -21,7 +21,8 @@ legend top right
   <b>Catálogo</b>: pacotes e promoção são da plataforma, iguais para todos os meios; os gateways só recebem o valor final.
   ① <b>Decorator</b> (quanto cobrar): camadas de preço no lugar de <i>Recarga.calcularValorTotal()</i> (Entrega 2).
   ② <b>Adapter</b> (por onde cobrar): Mercado Pago, Stripe e simulado atrás de <i>GatewayPagamento</i>.
-     O espectador escolhe o meio; se ele estiver indisponível, o sistema oferece as alternativas (O07).
+     O espectador escolhe o meio; se ele cair, o sistema verifica os outros: segue no único disponível
+     ou oferece só os que estão disponíveis (O07).
   ③ <b>Proxy</b> de proteção e de referência inteligente (confiar no aviso):
      barra aviso falso (O14) e pagamento já creditado (O11).
 endlegend
@@ -44,16 +45,18 @@ package "Serviços de Aplicação" {
     -gateways: GatewayPagamento[]
     +consultarOfertas(usuario: Usuario): OfertaPacote[]
     +consultarMeiosPagamento(): string[]
-    +montarPreco(pacote: Pacote): Preco
+    +montarPreco(pacote: Pacote, comDesconto: boolean = true): Preco
+    +descontoPara(pacote: Pacote): number [0..1]
     +processarRecarga(usuario: Usuario, pacote: Pacote, metodo: MetodoRecarga, gatewayEscolhido?: string): Promise<Recarga>
   }
 }
 
 package "Catálogo da plataforma" #F3E8FC {
   class catalogo <<módulo>> {
-    +MOEDAS_POR_REAL = 20
+    +MOEDAS_POR_REAL: number = 20
     +PACOTES: Pacote[]
     +CONFIGURACAO_PRECO: ConfiguracaoPreco
+    +REPASSE_POR_MOEDA: Dinheiro = R$ 0,02
   }
   class Pacote <<dataType>> {
     +id: string
@@ -65,10 +68,16 @@ package "Catálogo da plataforma" #F3E8FC {
     +taxaFixa: Dinheiro [0..1] {valor > 0}
     +aliquotaImposto: number [0..1] {valor > 0}
   }
+  class FaixaDesconto <<dataType>> {
+    +aPartirDe: Dinheiro
+    +percentual: number {0 < valor < 100}
+  }
   class OfertaPacote <<dataType>> {
     +pacote: Pacote
     +precoOriginal: Dinheiro
+    +precoSemDesconto: Dinheiro
     +precoPromocional: Dinheiro
+    +descontoPercentual: number [0..1]
     +composicao: string
   }
 }
@@ -113,6 +122,7 @@ package "② Adapter — por onde cobrar" #FFF4E0 {
     +nome: string
     +iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>
     +consultarPagamento(idPagamento: string): Promise<SituacaoPagamento>
+    +estaDisponivel(): Promise<boolean>
   }
   interface ValidadorWebhook {
     +validarWebhook(notificacao: NotificacaoPagamento): boolean
@@ -125,6 +135,7 @@ package "② Adapter — por onde cobrar" #FFF4E0 {
     +{static} conectar(accessToken: string, segredoWebhook: string): AdaptadorMercadoPago
     +iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>
     +consultarPagamento(idCheckout: string): Promise<SituacaoPagamento>
+    +estaDisponivel(): Promise<boolean>
     +validarWebhook(notificacao: NotificacaoPagamento): boolean
   }
   class AdaptadorStripe <<Adapter>> {
@@ -135,6 +146,7 @@ package "② Adapter — por onde cobrar" #FFF4E0 {
     +{static} conectar(chaveSecreta: string, segredoWebhook: string, urlRetorno?: string): AdaptadorStripe
     +iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>
     +consultarPagamento(idCheckout: string): Promise<SituacaoPagamento>
+    +estaDisponivel(): Promise<boolean>
     +validarWebhook(notificacao: NotificacaoPagamento): boolean
   }
   class AdaptadorProcessadorSimulado <<Adapter>> {
@@ -143,6 +155,7 @@ package "② Adapter — por onde cobrar" #FFF4E0 {
     -segredoWebhook: string
     +iniciarCheckout(valor: Dinheiro, recargaId: string): Promise<SessaoCheckout>
     +consultarPagamento(idPagamento: string): Promise<SituacaoPagamento>
+    +estaDisponivel(): Promise<boolean>
     +validarWebhook(notificacao: NotificacaoPagamento): boolean
   }
   package "SDK mercadopago v3 (Checkout Pro)" as PkgMP #FFFFFF {
@@ -158,6 +171,7 @@ package "② Adapter — por onde cobrar" #FFF4E0 {
     class "Checkout::Sessions" as StripeSessions <<Adaptee>> {
       +create(params: SessionCreateParams): Promise<Session>
       +retrieve(id: string): Promise<Session>
+      +list(params: SessionListParams): Promise<ApiList<Session>>
     }
   }
   class ProcessadorSimulado <<Adaptee>> {
@@ -254,6 +268,7 @@ package "Domínio" {
 ' ---- Catálogo
 catalogo -down-> "1..*" Pacote
 catalogo -down-> "1" ConfiguracaoPreco
+ConfiguracaoPreco -down-> "0..*" FaixaDesconto : descontosProgressivos
 OfertaPacote -down-> "1" Pacote
 
 ' ---- Decorator
@@ -321,13 +336,16 @@ ServicoConfirmacao -[hidden]down-> ServicoFinanceiro
 note right of catalogo
   20 de moeda virtual por R$ 1, com bônus
   progressivo de 0% (R$ 5) a 40% (R$ 1000).
-  Promoção vigente: 29% de desconto e 5% de imposto.
+  Desconto progressivo: 5% (R$ 5) a 33% (R$ 1000),
+  a maior faixa que o pacote alcança; 5% de imposto.
 end note
 
 note bottom of ComTaxaFixa
   Ordem fixa em montarPreco:
   desconto → taxa fixa → imposto (tudo em BRL).
   Preço original = PrecoPacote.calcular()
+  Preço riscado = mesma cadeia sem ComDesconto
+  (montarPreco(pacote, false) → precoSemDesconto)
   Preço promocional = cadeia completa.calcular()
 end note
 
@@ -343,9 +361,11 @@ note bottom of Preference
 end note
 
 note bottom of ErroMeioPagamentoIndisponivel
-  <b>O07</b>: com meio escolhido, o indisponível
-  cancela a recarga e devolve as alternativas
-  ao modal (não troca sem perguntar).
+  <b>O07</b>: com meio escolhido indisponível, verifica
+  os outros com estaDisponivel() (sem criar cobrança):
+  • um só disponível: a recarga segue nele;
+  • vários: cancela e devolve só os disponíveis;
+  • nenhum: cancela, sem alternativas.
   Sem escolha, tenta os gateways em ordem.
 end note
 

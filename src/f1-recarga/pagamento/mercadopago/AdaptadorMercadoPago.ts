@@ -89,6 +89,16 @@ export class AdaptadorMercadoPago implements GatewayPagamento {
     };
   }
 
+  /** Uma busca de um pagamento só: responde rápido e não cria nada. */
+  async estaDisponivel(): Promise<boolean> {
+    try {
+      await this.sdk.payment.search({ options: { limit: 1 } });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async consultarPagamento(idCheckout: string): Promise<SituacaoPagamento> {
     const preferencia = await this.chamar(() => this.sdk.preference.get({ preferenceId: idCheckout }));
     const referencia = preferencia.external_reference ?? "";
