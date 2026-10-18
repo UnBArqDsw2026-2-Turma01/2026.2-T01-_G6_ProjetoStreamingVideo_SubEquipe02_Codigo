@@ -39,6 +39,7 @@ describe("Chat (Client do Decorator)", () => {
     const [mensagem] = chat.mensagensExibidas();
 
     expect(mensagem.cabecalho()).toContain(`[${cor}]`);
+    expect(mensagem.cor()).toBe(cor);
     expect(mensagem.tempoFixacaoMin()).toBe(fixacao);
     expect(mensagem.descrever()).toContain(`limite de ${limite} caracteres`);
   });

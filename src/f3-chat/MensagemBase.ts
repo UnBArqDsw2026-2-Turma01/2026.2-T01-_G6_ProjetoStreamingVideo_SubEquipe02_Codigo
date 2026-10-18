@@ -27,6 +27,10 @@ export class MensagemBase implements MensagemDestacada {
     return this.conteudo;
   }
 
+  cor(): string | null {
+    return null;
+  }
+
   tempoFixacaoMin(): number {
     return 0;
   }

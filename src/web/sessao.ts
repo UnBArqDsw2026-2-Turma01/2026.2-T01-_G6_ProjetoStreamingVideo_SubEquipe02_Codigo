@@ -20,10 +20,14 @@ export type MensagemNoChat =
   | { readonly tipo: "comum"; readonly autor: string; readonly texto: string }
   | {
       readonly tipo: "destacada";
-      readonly cor: string;
-      readonly cabecalho: string;
+      readonly autor: string;
+      readonly quantidade: number;
       readonly texto: string;
-      readonly fixacaoMin: number;
+      /** Cor dada pelo decorador ComFaixaCor (null = sem cor). */
+      readonly cor: string | null;
+      readonly exibidaEm: number;
+      /** Até quando a mensagem fica fixada no topo, pelo decorador ComFixacao (epoch ms; null = não fixa). */
+      readonly fixadaAte: number | null;
     };
 
 /** Tamanho máximo de uma mensagem comum do chat. */
@@ -112,6 +116,7 @@ export class SessaoDemo {
       })),
       faixas: [FaixaDestaque.FAIXA_1, FaixaDestaque.FAIXA_2, FaixaDestaque.FAIXA_3, FaixaDestaque.FAIXA_4, FaixaDestaque.FAIXA_5],
       mensagens: this.mensagens,
+      agora: Date.now(),
     };
   }
 
@@ -160,12 +165,6 @@ export class SessaoDemo {
     await this.avisar(recarga, meio.segredo, "Reenvio do aviso");
   }
 
-  /** Envia um aviso com assinatura falsa, como faria alguém tentando creditar moedas sem pagar (O14). */
-  async avisoFalso(recargaId: string): Promise<void> {
-    const { recarga } = this.pedido(recargaId);
-    await this.avisar(recarga, "segredo-de-quem-tenta-fraudar", "Aviso falsificado");
-  }
-
   /** Doação com mensagem pela Facade da F2, que notifica o chat da F3 e faz o repasse. */
   doar(canalId: string, quantidade: number, mensagem: string): void {
     let resultado;
@@ -175,14 +174,19 @@ export class SessaoDemo {
       throw new ErroDaAcao(erro instanceof Error ? erro.message : String(erro));
     }
 
+    // A página aplica o que a pilha de decoradores da F3 devolveu: a cor e o tempo de fixação.
     const exibida = this.chat.mensagensExibidas().at(-1);
     if (resultado.notificacaoChatEnviada && exibida) {
+      const minutos = exibida.tempoFixacaoMin();
+      const agora = Date.now();
       this.mensagens.push({
         tipo: "destacada",
-        cor: resultado.doacao.faixa.cor,
-        cabecalho: exibida.cabecalho(),
+        autor: resultado.doacao.doador.nome,
+        quantidade: resultado.doacao.quantidadeMoedaVirtual,
         texto: exibida.texto(),
-        fixacaoMin: exibida.tempoFixacaoMin(),
+        cor: exibida.cor(),
+        exibidaEm: agora,
+        fixadaAte: minutos > 0 ? agora + minutos * 60_000 : null,
       });
     }
   }

@@ -92,7 +92,6 @@ function renderizarPedidos(pedidos) {
         { class: "pedido" },
         el("p", {}, `${p.id}: ${p.moedas} moedas por ${p.valor} no ${p.meio} (${p.status})`),
         p.status === "PENDENTE" ? botao("Pagar", "/api/recargas/pagar") : botao("Reenviar aviso", "/api/recargas/reenviar-aviso"),
-        botao("Aviso falso", "/api/recargas/aviso-falso"),
         p.aviso ? el("p", { class: "nota" }, p.aviso) : null,
       );
     }),
@@ -126,24 +125,46 @@ function renderizarCanais(canais) {
 
 // Chat (F3)
 
+let mensagens = [];
+let diferencaRelogio = 0; // relógio do servidor menos o do navegador
+
+const agoraNoServidor = () => Date.now() + diferencaRelogio;
+
 function itemDoChat(m) {
   if (m.tipo === "comum") return el("li", {}, el("b", {}, `${m.autor}: `), m.texto);
   return el(
     "li",
-    { class: `destacada ${m.cor}` },
-    el("div", { class: "cabecalho" }, m.cabecalho),
+    { class: `destacada ${m.cor ?? ""}` },
+    el("div", { class: "autor" }, el("b", {}, m.autor), ` ${m.quantidade} moedas`),
     el("div", {}, m.texto),
   );
 }
 
-function renderizarChat(mensagens) {
-  const fixadas = mensagens.filter((m) => m.tipo === "destacada" && m.fixacaoMin > 0).slice(-2).reverse();
-  $("fixadas").replaceChildren(...fixadas.map(itemDoChat));
-  const lista = $("mensagens");
-  const noFim = lista.scrollHeight - lista.scrollTop - lista.clientHeight < 30;
-  lista.replaceChildren(...mensagens.map(itemDoChat));
-  if (noFim) lista.scrollTop = lista.scrollHeight;
+/** Mensagens com fixação ainda valendo ficam no topo; ao acabar o tempo, saem de lá. */
+function renderizarFixadas() {
+  const agora = agoraNoServidor();
+  const ativas = mensagens.filter((m) => m.tipo === "destacada" && m.fixadaAte && m.fixadaAte > agora).reverse();
+  $("fixadas").replaceChildren(
+    ...ativas.map((m) => {
+      const item = itemDoChat(m);
+      const restante = (m.fixadaAte - agora) / (m.fixadaAte - m.exibidaEm);
+      item.append(el("div", { class: "tempo", style: `width: ${Math.max(0, restante) * 100}%` }));
+      return item;
+    }),
+  );
 }
+
+function renderizarChat(lista, agora) {
+  mensagens = lista;
+  diferencaRelogio = agora - Date.now();
+  renderizarFixadas();
+  const ul = $("mensagens");
+  const noFim = ul.scrollHeight - ul.scrollTop - ul.clientHeight < 30;
+  ul.replaceChildren(...mensagens.map(itemDoChat));
+  if (noFim) ul.scrollTop = ul.scrollHeight;
+}
+
+setInterval(renderizarFixadas, 1000);
 
 // Tela
 
@@ -154,7 +175,7 @@ function renderizar(estado) {
   renderizarMeios(estado.meios);
   renderizarPedidos(estado.pedidos);
   renderizarCanais(estado.canais);
-  renderizarChat(estado.mensagens);
+  renderizarChat(estado.mensagens, estado.agora);
   atualizarFaixa();
 }
 

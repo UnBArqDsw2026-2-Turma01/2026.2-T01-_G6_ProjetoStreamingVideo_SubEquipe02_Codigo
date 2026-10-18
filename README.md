@@ -245,9 +245,9 @@ A mesma história em uma página web, servida por um servidor HTTP mínimo (`src
 
 | Parte da tela | Frente e padrões |
 | -- | -- |
-| Recarga (F1) | Preço em camadas (Decorator), escolha do meio de pagamento (Adapter) e aviso de pagamento verificado (Proxy). Os botões "Aviso falso" e "Reenviar aviso" mostram o Proxy barrando fraude (O14) e duplicidade (O11). |
+| Recarga (F1) | Preço em camadas (Decorator), escolha do meio de pagamento (Adapter) e aviso de pagamento verificado (Proxy). O botão "Reenviar aviso" mostra o Proxy barrando o crédito em duplicidade (O11). |
 | Doação (F2) | Facade com Mediator, com as regras de canal monetizado, saldo e limite de caracteres. |
-| Chat (F3) | Mensagem destacada montada pelo Decorator (limite, cor da faixa e fixação), com as fixadas no topo. Também dá para escrever mensagens comuns. |
+| Chat (F3) | Mensagem destacada montada pelo Decorator: a página pinta a mensagem com a cor devolvida por `ComFaixaCor` e a mantém fixada no topo do chat pelo tempo de `ComFixacao`; `ComLimiteCaracteres` recusa a mensagem acima do limite. Também dá para escrever mensagens comuns. |
 
 O pagamento usa os processadores simulados da F1 ("Simulado-A" e "Simulado-B"), porque os reais precisam de credenciais e de uma URL pública para o aviso de pagamento. O estado fica em memória e é o mesmo para todas as abas; use "Reiniciar" para começar do zero.
 
