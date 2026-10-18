@@ -15,25 +15,19 @@ import {
 import { FaixaDestaque, montarDoacao, type DoacaoController } from "../f2-doacao";
 import { Chat } from "../f3-chat";
 
-/** Uma linha do painel "Padrões em ação": qual frente e qual padrão agiu, e o que aconteceu. */
-export interface Evento {
-  readonly id: number;
-  readonly frente: "F1" | "F2" | "F3";
-  readonly padrao: string;
-  readonly texto: string;
-  readonly tipo: "ok" | "alerta";
-}
+/** Mensagem como a página exibe no chat: comum (escrita no chat) ou destacada (vinda de uma doação). */
+export type MensagemNoChat =
+  | { readonly tipo: "comum"; readonly autor: string; readonly texto: string }
+  | {
+      readonly tipo: "destacada";
+      readonly cor: string;
+      readonly cabecalho: string;
+      readonly texto: string;
+      readonly fixacaoMin: number;
+    };
 
-/** Mensagem destacada como a página exibe no chat. */
-export interface MensagemNoChat {
-  readonly autor: string;
-  readonly quantidade: number;
-  readonly cor: string;
-  readonly cabecalho: string;
-  readonly texto: string;
-  readonly fixacaoMin: number;
-  readonly camadas: string;
-}
+/** Tamanho máximo de uma mensagem comum do chat. */
+const LIMITE_MENSAGEM_COMUM = 200;
 
 /** Erro de regra de negócio ou de meio de pagamento que a página mostra ao usuário. */
 export class ErroDaAcao extends Error {}
@@ -60,8 +54,7 @@ export class SessaoDemo {
   private meios!: Map<string, MeioSimulado>;
   private pedidos!: Map<string, Recarga>;
   private mensagens!: MensagemNoChat[];
-  private eventos!: Evento[];
-  private sequenciaEvento = 0;
+  private ultimoAviso!: Map<string, string>;
   private sequenciaAviso = 0;
 
   constructor() {
@@ -81,8 +74,8 @@ export class SessaoDemo {
     const geradorId = new GeradorId();
 
     this.meios = new Map([
-      ["Processador A", { processador: new ProcessadorSimulado(), segredo: "segredo-a" }],
-      ["Processador B", { processador: new ProcessadorSimulado(), segredo: "segredo-b" }],
+      ["Simulado-A", { processador: new ProcessadorSimulado(), segredo: "segredo-a" }],
+      ["Simulado-B", { processador: new ProcessadorSimulado(), segredo: "segredo-b" }],
     ]);
     const gateways = [...this.meios].map(
       ([nome, meio]) => new AdaptadorProcessadorSimulado(meio.processador, meio.segredo, nome),
@@ -95,8 +88,8 @@ export class SessaoDemo {
     this.doacoes = montarDoacao({ financeiro, notificadorChat: this.chat, usuarios, geradorId }).controller;
 
     this.pedidos = new Map();
+    this.ultimoAviso = new Map();
     this.mensagens = [];
-    this.eventos = [];
   }
 
   estado() {
@@ -115,10 +108,10 @@ export class SessaoDemo {
         valor: r.valor.formatar(),
         meio: r.gatewayUtilizado ?? "",
         status: r.status,
+        aviso: this.ultimoAviso.get(r.id) ?? "",
       })),
       faixas: [FaixaDestaque.FAIXA_1, FaixaDestaque.FAIXA_2, FaixaDestaque.FAIXA_3, FaixaDestaque.FAIXA_4, FaixaDestaque.FAIXA_5],
-      mensagens: [...this.mensagens].reverse(),
-      eventos: [...this.eventos].reverse().slice(0, 40),
+      mensagens: this.mensagens,
     };
   }
 
@@ -136,7 +129,6 @@ export class SessaoDemo {
     const meio = this.meios.get(nome);
     if (!meio) throw new ErroDaAcao(`Meio de pagamento desconhecido: ${nome}`);
     meio.processador.online = !meio.processador.online;
-    this.registrar("F1", "Adapter", `${nome} ficou ${meio.processador.online ? "disponível" : "fora do ar"}.`, "alerta");
   }
 
   /** Cria o pedido de recarga: preço pela cadeia de decoradores e checkout pelo adaptador do meio escolhido. */
@@ -149,13 +141,8 @@ export class SessaoDemo {
         meio,
       );
       this.pedidos.set(recarga.id, recarga);
-      this.registrar("F1", "Decorator", `Preço do pacote de ${recarga.quantidadeMoedaVirtual}: ${recarga.composicaoPreco}.`);
-      this.registrar("F1", "Adapter", `Pedido aberto no ${recarga.gatewayUtilizado} (${recarga.instrucoesPagamento}).`);
     } catch (erro) {
-      if (erro instanceof ErroMeioPagamentoIndisponivel) {
-        this.registrar("F1", "Adapter", erro.message, "alerta");
-        throw new ErroDaAcao(erro.message);
-      }
+      if (erro instanceof ErroMeioPagamentoIndisponivel) throw new ErroDaAcao(erro.message);
       throw erro;
     }
   }
@@ -185,34 +172,29 @@ export class SessaoDemo {
     try {
       resultado = this.doacoes.doarComMensagem(this.espectador.id, canalId, quantidade, mensagem);
     } catch (erro) {
-      const motivo = erro instanceof Error ? erro.message : String(erro);
-      this.registrar("F2", "Facade", `Doação recusada: ${motivo}`, "alerta");
-      throw new ErroDaAcao(motivo);
+      throw new ErroDaAcao(erro instanceof Error ? erro.message : String(erro));
     }
-
-    const { doacao } = resultado;
-    this.registrar(
-      "F2",
-      "Facade + Mediator",
-      `${quantidade} de moeda virtual doadas na ${doacao.faixa.codigo}; repasse de ${doacao.valorRepasse.formatar()} ao canal.`,
-    );
 
     const exibida = this.chat.mensagensExibidas().at(-1);
     if (resultado.notificacaoChatEnviada && exibida) {
-      const faixa = FaixaDestaque.paraQuantidade(quantidade);
       this.mensagens.push({
-        autor: this.espectador.nome,
-        quantidade,
-        cor: faixa.cor,
+        tipo: "destacada",
+        cor: resultado.doacao.faixa.cor,
         cabecalho: exibida.cabecalho(),
         texto: exibida.texto(),
         fixacaoMin: exibida.tempoFixacaoMin(),
-        camadas: exibida.descrever(),
       });
-      this.registrar("F3", "Decorator", `Mensagem montada em camadas: ${exibida.descrever()}.`);
-    } else if (resultado.avisoChat) {
-      this.registrar("F3", "Decorator", resultado.avisoChat, "alerta");
     }
+  }
+
+  /** Mensagem comum, escrita direto no chat, sem doação. */
+  escrever(texto: string): void {
+    const limpo = texto.trim();
+    if (limpo === "") throw new ErroDaAcao("Escreva uma mensagem.");
+    if (Array.from(limpo).length > LIMITE_MENSAGEM_COMUM) {
+      throw new ErroDaAcao(`A mensagem passa de ${LIMITE_MENSAGEM_COMUM} caracteres.`);
+    }
+    this.mensagens.push({ tipo: "comum", autor: this.espectador.nome, texto: limpo });
   }
 
   private async avisar(recarga: Recarga, segredo: string, descricao: string): Promise<void> {
@@ -223,8 +205,7 @@ export class SessaoDemo {
     };
     const aviso: NotificacaoPagamento = { ...dados, assinatura: assinarNotificacao(segredo, dados) };
     const resultado = await this.recargas.receberWebhook(recarga.gatewayUtilizado!, aviso);
-    const deuCerto = resultado.efeito === "CREDITADO";
-    this.registrar("F1", "Proxy", `${descricao}: ${resultado.efeito} (${resultado.motivo}).`, deuCerto ? "ok" : "alerta");
+    this.ultimoAviso.set(recarga.id, `${descricao}: ${resultado.efeito} (${resultado.motivo})`);
   }
 
   private pedido(recargaId: string): { recarga: Recarga; meio: MeioSimulado } {
@@ -232,9 +213,5 @@ export class SessaoDemo {
     const meio = recarga?.gatewayUtilizado ? this.meios.get(recarga.gatewayUtilizado) : undefined;
     if (!recarga || !meio || !recarga.idCheckout) throw new ErroDaAcao(`Pedido de recarga inexistente: ${recargaId}`);
     return { recarga, meio };
-  }
-
-  private registrar(frente: Evento["frente"], padrao: string, texto: string, tipo: Evento["tipo"] = "ok"): void {
-    this.eventos.push({ id: ++this.sequenciaEvento, frente, padrao, texto, tipo });
   }
 }
