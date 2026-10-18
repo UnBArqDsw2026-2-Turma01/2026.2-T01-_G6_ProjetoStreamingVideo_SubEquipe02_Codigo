@@ -277,7 +277,7 @@ setInterval(renderizarFixadas, 200);
 
 function renderizarVelocidades(atual) {
   $("velocidades").replaceChildren(
-    ...[1, 2, 10, 100].map((v) =>
+    ...[1, 10, 100, 1000].map((v) =>
       el(
         "button",
         {

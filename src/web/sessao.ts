@@ -46,7 +46,7 @@ export interface NotificacaoCriador {
 }
 
 /** Velocidades do relógio da demonstração (só a fixação das mensagens depende do tempo). */
-export const VELOCIDADES = [1, 2, 10, 100] as const;
+export const VELOCIDADES = [1, 10, 100, 1000] as const;
 
 /** Tamanho máximo de uma mensagem comum do chat. */
 const LIMITE_MENSAGEM_COMUM = 200;
