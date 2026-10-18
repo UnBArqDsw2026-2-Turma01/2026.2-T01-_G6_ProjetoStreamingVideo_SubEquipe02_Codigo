@@ -46,7 +46,7 @@ export async function demonstrarRecarga(espectador: Usuario, financeiro: Servico
   console.log("  [Decorator] Modal de moeda virtual:");
   for (const oferta of controller.consultarOfertas(espectador.id)) {
     console.log(
-      `    ${oferta.pacote.quantidadeMoedaVirtual} de moeda virtual: de ${oferta.precoOriginal.formatar()} por ${oferta.precoPromocional.formatar()}`,
+      `    ${oferta.pacote.quantidadeMoedaVirtual} de moeda virtual: de ${oferta.precoSemDesconto.formatar()} por ${oferta.precoPromocional.formatar()}`,
     );
     console.log(`      composição: ${oferta.composicao}`);
   }

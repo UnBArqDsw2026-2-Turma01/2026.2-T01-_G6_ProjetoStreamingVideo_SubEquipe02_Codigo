@@ -118,9 +118,11 @@ import type { NotificadorChat } from "../contratos";
 | `f1-recarga/pagamento` | **Adapter** | `GatewayPagamento` com `AdaptadorMercadoPago`, `AdaptadorStripe` e `AdaptadorProcessadorSimulado` |
 | `f1-recarga/confirmacao` | **Proxy** | `ProxyConfirmacaoSegura` (assinatura O14, duplicidade O11) diante do `ServicoConfirmacao` |
 
-- **Catálogo único:** os pacotes (20 de moeda virtual por R$ 1, com bônus progressivo de 0% a 40%) e a promoção (29% de desconto, 5% de imposto) pertencem ao sistema e valem para **todos** os meios de pagamento. Os gateways recebem só o valor final; nunca conhecem pacotes nem moeda virtual.
+- **Catálogo único:** os pacotes (20 de moeda virtual por R$ 1, com bônus progressivo de 0% a 40%) e a promoção (desconto progressivo de 5% no pacote de R$ 5 a 33% no de R$ 1000, mais 5% de imposto) pertencem ao sistema e valem para **todos** os meios de pagamento. Os gateways recebem só o valor final; nunca conhecem pacotes nem moeda virtual.
+- **Desconto progressivo:** `CONFIGURACAO_PRECO.descontosProgressivos` define faixas "a partir de R$ X, Y% de desconto"; cada pacote recebe a maior faixa que o seu valor de tabela alcança (`ServicoRecarga.descontoPara`). O Decorator não muda: o `ComDesconto` só recebe um percentual diferente por pacote. Os preços exibidos já incluem o imposto (preço final, como manda o CDC): o valor riscado é a mesma cadeia sem a camada de desconto (`montarPreco(pacote, false)`), então "R$ 1050,00 − 33% = R$ 703,50" fecha, e o resumo do pacote informa quanto de imposto está incluído.
+- **Repasse ao criador (F2):** cada moeda doada vale **R$ 0,02** para o criador (`REPASSE_POR_MOEDA`, no catálogo). O valor é fixo e fica abaixo do menor preço efetivo de venda (R$ 0,0251 por moeda no pacote de R$ 1000, com bônus e desconto), então a plataforma nunca repassa mais do que recebeu; um teste do catálogo quebra se pacotes ou promoção mudarem a ponto de dar prejuízo.
 - **Só reais:** toda a recarga opera em BRL; não há conversão de moeda.
-- **Escolha do meio de pagamento:** o modal lista os meios com `consultarMeiosPagamento()` e o espectador escolhe um em `recarregar(..., gateway)`. Se o meio escolhido estiver indisponível, a recarga é cancelada e o sistema lança `ErroMeioPagamentoIndisponivel` com as alternativas, sem trocar de processador por conta própria (O07). Sem escolha, os gateways são tentados em ordem.
+- **Escolha do meio de pagamento:** o modal lista os meios com `consultarMeiosPagamento()` e o espectador escolhe um em `recarregar(..., gateway)`. Se o meio escolhido estiver indisponível, o sistema verifica os outros com `estaDisponivel()`, que não cria cobrança (O07): se só um responder, a recarga segue nele automaticamente; se vários responderem, a recarga é cancelada e `ErroMeioPagamentoIndisponivel` lista só os disponíveis, para o espectador escolher; se nenhum responder, o erro avisa que não há outro meio. Sem escolha, os gateways são tentados em ordem.
 - **Mercado Pago (Checkout Pro):** o `AdaptadorMercadoPago` adapta direto o SDK oficial (`mercadopago`). O `idCheckout` é o id da preferência; a consulta encontra o pagamento pela `external_reference` (id da recarga).
 - **Stripe (Checkout Session):** o `AdaptadorStripe` adapta direto o SDK oficial (`stripe`). O `idCheckout` é o id da sessão (`cs_...`), e a recarga vai como `client_reference_id`. Sessão paga é APROVADO, aberta é PENDENTE e expirada é RECUSADO.
 
@@ -205,7 +207,7 @@ npm run demo:mp
 npm run demo:stripe
 ```
 
-Os dois compram o pacote de R$ 10 (R$ 7,46 com a promoção), imprimem o link e consultam o pagamento a cada 5 segundos, por até 5 minutos. Ao detectar a aprovação, passam o aviso pelo Proxy e mostram o crédito. `Ctrl+C` encerra antes.
+Os dois compram o pacote de R$ 10 (R$ 9,66 com 8% de desconto e 5% de imposto), imprimem o link e consultam o pagamento a cada 5 segundos, por até 5 minutos. Ao detectar a aprovação, passam o aviso pelo Proxy e mostram o crédito. `Ctrl+C` encerra antes.
 
 #### Como pagar em modo de teste
 
@@ -252,8 +254,9 @@ A mesma história em uma página web, servida por um servidor HTTP mínimo (`src
 
 Meios de pagamento:
 
-- **Mercado Pago e Stripe reais (modo de teste):** aparecem quando o `.env` tem as credenciais (ver [Configurando as APIs de pagamento](#configurando-as-apis-de-pagamento-modo-de-teste)). Ao comprar, a página mostra o link do checkout; pague nele com o comprador de teste ou o cartão de teste e clique em "Verificar pagamento". Como o processador não alcança o `localhost` para chamar o webhook, a página consulta o pagamento e, se aprovado, monta o aviso assinado, que passa pelo Proxy (o mesmo que o `demo:interativo` faz).
+- **Mercado Pago e Stripe reais (modo de teste):** aparecem quando o `.env` tem as credenciais (ver [Configurando as APIs de pagamento](#configurando-as-apis-de-pagamento-modo-de-teste)). Ao comprar, a página mostra o link do checkout; pague nele com o comprador de teste ou o cartão de teste. Enquanto o pagamento não é confirmado, o pedido aparece como **Pendente** e a página consulta o processador sozinha a cada 5 segundos (e na hora, quando você volta para a aba); ao confirmar, as moedas são creditadas sem nenhum clique. Como o processador não alcança o `localhost` para chamar o webhook, a página consulta o pagamento e, se aprovado, monta o aviso assinado, que passa pelo Proxy (o mesmo que o `demo:interativo` faz).
 - **Simulado-A e Simulado-B:** funcionam sem credenciais. "Pagar" simula o pagamento, e "Fora do ar" tira o meio do ar para mostrar o Adapter avisando e sugerindo outro meio.
+- **Fora do ar:** vale para todos os meios. Nos simulados cai o próprio processador; no Mercado Pago e no Stripe, a página responde como se o processador estivesse indisponível (`src/web/GatewayDesligavel.ts`), sem mexer na conta real. Com um pedido pendente, desligar o meio faz a consulta automática falhar até ele voltar. Deixando só um meio no ar, a compra em qualquer outro vai automaticamente para ele, com um aviso no pedido.
 
 Os botões de velocidade (1x, 10x, 100x e 1000x) aceleram o relógio da demonstração, para ver a fixação das mensagens acabar sem esperar o tempo real. Ao subir, o servidor diz no terminal quais processadores reais conectou. O estado fica em memória e é o mesmo para todas as abas; use "Reiniciar" para começar do zero.
 

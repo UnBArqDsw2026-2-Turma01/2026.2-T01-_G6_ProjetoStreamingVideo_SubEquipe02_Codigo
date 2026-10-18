@@ -3,6 +3,7 @@
 const $ = (id) => document.getElementById(id);
 let pacotes = [];
 let pacoteEscolhido = "p100";
+let aliquotaImposto = 0;
 let faixas = [];
 
 function el(tag, props = {}, ...filhos) {
@@ -48,6 +49,7 @@ async function agir(erroId, metodo, caminho, corpo) {
 
 const numero = (n) => n.toLocaleString("pt-BR");
 const hora = (epoch) => new Date(epoch).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const horaComSegundos = (epoch) => new Date(epoch).toLocaleTimeString("pt-BR");
 
 // Recarga (F1)
 
@@ -65,67 +67,188 @@ function renderizarPacotes() {
             renderizarPacotes();
           },
         },
+        p.descontoPercentual > 0 ? el("span", { class: "desconto-pacote" }, `-${p.descontoPercentual}%`) : null,
         el("span", { class: "moedas" }, numero(p.moedas)),
         el("span", { class: "unidade" }, "moedas"),
         el("span", {}, p.precoPromocional),
-        p.precoOriginal !== p.precoPromocional ? el("s", {}, p.precoOriginal) : null,
+        p.precoSemDesconto !== p.precoPromocional ? el("s", {}, p.precoSemDesconto) : null,
       ),
     ),
   );
   const escolhido = pacotes.find((p) => p.id === pacoteEscolhido);
   $("comprar").textContent = escolhido ? `Comprar por ${escolhido.precoPromocional}` : "Comprar";
+  renderizarResumo(escolhido);
+}
+
+/**
+ * Conta do pacote escolhido, toda em preço final (com imposto): o desconto do pacote
+ * vale sobre o preço sem desconto, e o imposto aparece como valor incluído no total.
+ */
+function renderizarResumo(p) {
+  if (!p) {
+    $("resumo").replaceChildren();
+    return;
+  }
+  const linha = (rotulo, valor, classe = "") => el("div", { class: `linha ${classe}` }, el("span", {}, rotulo), el("span", {}, valor));
+  $("resumo").replaceChildren(
+    linha(`${numero(p.moedas)} moedas`, p.precoSemDesconto),
+    p.descontoPercentual > 0 ? linha(`Desconto do pacote (${p.descontoPercentual}%)`, `− ${p.valorDesconto}`, "desconto") : null,
+    linha("Total", p.precoPromocional, "total"),
+    aliquotaImposto > 0 ? el("p", { class: "nota imposto" }, `Inclui ${p.valorImposto} de imposto (${aliquotaImposto}%).`) : null,
+  );
 }
 
 function renderizarMeios(meios) {
   const escolhido = $("meio").value || meios[0].nome;
   $("meio").replaceChildren(...meios.map((m) => el("option", { value: m.nome, selected: m.nome === escolhido }, m.nome)));
   $("fora-do-ar").replaceChildren(
-    ...meios
-      .filter((m) => !m.real)
-      .map((m) =>
-        el(
-          "label",
-          {},
-          el("input", {
-            type: "checkbox",
-            checked: !m.online,
-            onchange: () => agir("erro-recarga", "POST", "/api/meios/alternar", { nome: m.nome }),
-          }),
-          m.nome,
-        ),
+    ...meios.map((m) =>
+      el(
+        "label",
+        {},
+        el("input", {
+          type: "checkbox",
+          checked: !m.online,
+          onchange: () => agir("erro-recarga", "POST", "/api/meios/alternar", { nome: m.nome }),
+        }),
+        m.nome,
       ),
+    ),
   );
+}
+
+/**
+ * Acompanhamento automático do pedido num meio real: enquanto estiver PENDENTE, a página
+ * consulta o processador sozinha (o mesmo que o botão "Verificar" fazia) e para quando
+ * o pagamento é creditado, a recarga é cancelada ou o tempo limite acaba.
+ */
+const INTERVALO_VERIFICACAO_MS = 5000;
+const LIMITE_VERIFICACAO_MS = 30 * 60 * 1000; // validade da sessão do Stripe
+const acompanhamento = { id: null, timer: null, inicio: 0, emAndamento: false, ultima: 0, esgotado: false };
+
+function pararAcompanhamento() {
+  clearInterval(acompanhamento.timer);
+  Object.assign(acompanhamento, { id: null, timer: null, emAndamento: false, ultima: 0, esgotado: false });
+}
+
+function acompanharPedido(p) {
+  if (!p || !p.real || p.status !== "PENDENTE") {
+    pararAcompanhamento();
+    return;
+  }
+  if (acompanhamento.id === p.id) return;
+  pararAcompanhamento();
+  Object.assign(acompanhamento, {
+    id: p.id,
+    inicio: Date.now(),
+    timer: setInterval(verificarAutomaticamente, INTERVALO_VERIFICACAO_MS),
+  });
+}
+
+/** Uma consulta por vez, e só com a aba visível; a volta à aba dispara uma consulta na hora. */
+async function verificarAutomaticamente() {
+  const { id } = acompanhamento;
+  if (!id || acompanhamento.emAndamento || document.hidden) return;
+  if (Date.now() - acompanhamento.inicio > LIMITE_VERIFICACAO_MS) {
+    clearInterval(acompanhamento.timer);
+    acompanhamento.esgotado = true;
+    renderizar(await chamar("GET", "/api/estado"));
+    return;
+  }
+  acompanhamento.emAndamento = true;
+  try {
+    await agir("erro-recarga", "POST", "/api/recargas/verificar", { recargaId: id });
+  } finally {
+    if (acompanhamento.id === id) {
+      acompanhamento.emAndamento = false;
+      acompanhamento.ultima = Date.now();
+      $("ultima-verificacao")?.replaceChildren(`Última verificação às ${horaComSegundos(acompanhamento.ultima)}.`);
+    }
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) verificarAutomaticamente();
+});
+
+/** Recomeça o acompanhamento depois do tempo limite, a pedido do espectador. */
+function retomarAcompanhamento() {
+  const id = acompanhamento.id;
+  pararAcompanhamento();
+  acompanharPedido({ id, real: true, status: "PENDENTE" });
+  verificarAutomaticamente();
 }
 
 /** Só o último pedido aparece: aguardando pagamento ou já creditado. */
 function renderizarPedido(p) {
+  acompanharPedido(p);
   if (!p) {
     $("pedido").replaceChildren();
     return;
   }
+  const troca = p.troca ? el("p", { class: "nota troca" }, p.troca) : null;
   if (p.status === "CONCLUIDA") {
-    $("pedido").replaceChildren(el("div", { class: "pedido concluido" }, el("p", {}, `${numero(p.moedas)} moedas creditadas.`)));
+    $("pedido").replaceChildren(
+      el("div", { class: "pedido concluido" }, el("p", {}, `${numero(p.moedas)} moedas creditadas no ${p.meio}.`), troca),
+    );
     return;
   }
-  const verificar = el(
-    "button",
-    { type: "button", onclick: () => agir("erro-recarga", "POST", "/api/recargas/verificar", { recargaId: p.id }) },
-    p.real ? "Verificar pagamento" : "Pagar",
-  );
+  if (p.status === "CANCELADA") {
+    $("pedido").replaceChildren(el("div", { class: "pedido" }, el("p", {}, `Pedido de ${p.valor} no ${p.meio} cancelado.`)));
+    return;
+  }
+
+  // Simulado: o espectador "paga" pelo botão. Real: paga no checkout e a página acompanha sozinha.
+  const acao = p.real
+    ? acompanhamento.esgotado
+      ? el(
+          "p",
+          {},
+          el("span", { class: "nota" }, "Parei de verificar automaticamente. "),
+          el("button", { type: "button", onclick: retomarAcompanhamento }, "Verificar de novo"),
+        )
+      : el(
+          "p",
+          { class: "nota", id: "ultima-verificacao" },
+          acompanhamento.ultima
+            ? `Última verificação às ${horaComSegundos(acompanhamento.ultima)}.`
+            : "Verificando automaticamente a cada 5 segundos.",
+        )
+    : el(
+        "p",
+        {},
+        el(
+          "button",
+          { type: "button", onclick: () => agir("erro-recarga", "POST", "/api/recargas/verificar", { recargaId: p.id }) },
+          "Pagar",
+        ),
+      );
+
   $("pedido").replaceChildren(
     el(
       "div",
-      { class: "pedido" },
-      el("p", {}, `Aguardando o pagamento de ${p.valor} no ${p.meio}.`),
+      { class: `pedido${p.real ? " pendente" : ""}` },
+      troca,
+      el(
+        "p",
+        {},
+        p.real ? el("span", { class: "selo" }, "Pendente") : null,
+        p.real ? ` Aguardando a confirmação do pagamento de ${p.valor} no ${p.meio}.` : `Aguardando o pagamento de ${p.valor} no ${p.meio}.`,
+      ),
       p.link
         ? el(
-            "p",
-            {},
-            el("a", { href: p.link, target: "_blank", rel: "noopener" }, "Abrir checkout"),
-            el("span", { class: "nota" }, ` (${p.comoPagar})`),
+            "div",
+            { class: "checkout" },
+            el(
+              "a",
+              { class: "botao-pagar", href: p.link, target: "_blank", rel: "noopener" },
+              `Pagar no ${p.meio}`,
+              el("span", { "aria-hidden": "true" }, " ↗"),
+            ),
+            el("p", { class: "nota" }, `Abre em outra aba. ${p.comoPagar.charAt(0).toUpperCase()}${p.comoPagar.slice(1)}.`),
           )
         : null,
-      el("p", {}, verificar),
+      acao,
       p.aviso ? el("p", { class: "nota" }, p.aviso) : null,
     ),
   );
@@ -334,8 +457,7 @@ $("reiniciar").addEventListener("click", () => {
 (async () => {
   const ofertas = await chamar("GET", "/api/ofertas");
   pacotes = ofertas.pacotes;
-  if (ofertas.descontoPercentual > 0) $("desconto").textContent = `${ofertas.descontoPercentual}% OFF`;
-  if (ofertas.aliquotaImposto > 0) $("imposto").textContent = `(imposto de ${ofertas.aliquotaImposto}%)`;
+  aliquotaImposto = ofertas.aliquotaImposto;
   renderizarPacotes();
   renderizar(await chamar("GET", "/api/estado"));
 })();

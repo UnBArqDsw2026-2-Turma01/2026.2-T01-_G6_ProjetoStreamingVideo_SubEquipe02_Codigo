@@ -127,6 +127,10 @@ export class FakeSdkStripe implements SdkStripe {
         this.sessoes.set(id, sessao);
         return sessao;
       },
+      list: async () => {
+        this.lancarSePreciso();
+        return { object: "list", data: [...this.sessoes.values()].slice(-1), has_more: false };
+      },
       retrieve: async (id: string) => {
         this.lancarSePreciso();
         const sessao = this.sessoes.get(id);

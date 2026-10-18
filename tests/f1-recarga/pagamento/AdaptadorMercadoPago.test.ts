@@ -94,6 +94,14 @@ describe("AdaptadorMercadoPago", () => {
     );
   });
 
+  test("está disponível quando a API responde; indisponível quando falha, sem lançar", async () => {
+    const { sdk, adaptador } = criar();
+    expect(await adaptador.estaDisponivel()).toBe(true);
+    sdk.proximoErro = new MPServerError({ status: 503, message: "Service Unavailable" });
+    expect(await adaptador.estaDisponivel()).toBe(false);
+    expect(sdk.preferencias.size).toBe(0); // a verificação não cria cobrança
+  });
+
   test("erro de requisição (4xx) é propagado como está, sem acionar o fallback", async () => {
     const { sdk, adaptador } = criar();
     const erro = new MPBadRequestError({ status: 400, message: "invalid unit_price" });

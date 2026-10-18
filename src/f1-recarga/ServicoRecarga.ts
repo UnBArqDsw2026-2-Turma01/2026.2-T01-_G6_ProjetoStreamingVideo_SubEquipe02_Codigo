@@ -13,9 +13,18 @@ import { MetodoRecarga, Recarga } from "./Recarga";
 
 /** Regras de preço ativas (parâmetros de configuração, Entrega 2). Todas opcionais; tudo em reais. */
 export interface ConfiguracaoPreco {
+  /** Desconto igual para todos os pacotes (usado quando nenhuma faixa progressiva se aplica). */
   readonly descontoPercentual?: number;
+  /** Desconto progressivo: cada faixa vale a partir de um valor de tabela; vence a maior alcançada. */
+  readonly descontosProgressivos?: readonly FaixaDesconto[];
   readonly taxaFixa?: Dinheiro;
   readonly aliquotaImposto?: number;
+}
+
+/** "A partir de `aPartirDe` (valor de tabela do pacote), `percentual`% de desconto." */
+export interface FaixaDesconto {
+  readonly aPartirDe: Dinheiro;
+  readonly percentual: number;
 }
 
 /**
@@ -64,7 +73,9 @@ export class ServicoRecarga {
       return {
         pacote,
         precoOriginal: new PrecoPacote(pacote).calcular(),
+        precoSemDesconto: this.montarPreco(pacote, false).calcular(),
         precoPromocional: preco.calcular(),
+        descontoPercentual: this.descontoPara(pacote),
         composicao: preco.descrever(),
       };
     });
@@ -74,15 +85,30 @@ export class ServicoRecarga {
    * Monta a cadeia de decoradores em ordem fixa:
    * desconto → taxa fixa → imposto.
    * O tipo `Preco` não impede ordens inválidas; quem garante a ordem é este método.
+   * Com `comDesconto = false`, monta a mesma cadeia sem a camada de desconto: é o
+   * preço final fora da promoção (com taxa e imposto), exibido riscado no modal.
    */
-  montarPreco(pacote: Pacote): Preco {
-    const { descontoPercentual, taxaFixa, aliquotaImposto } = this.configuracaoPreco;
+  montarPreco(pacote: Pacote, comDesconto = true): Preco {
+    const { taxaFixa, aliquotaImposto } = this.configuracaoPreco;
+    const descontoPercentual = comDesconto ? this.descontoPara(pacote) : undefined;
     let preco: Preco = new PrecoPacote(pacote);
     if (descontoPercentual !== undefined) preco = new ComDesconto(preco, descontoPercentual);
     if (taxaFixa !== undefined) preco = new ComTaxaFixa(preco, taxaFixa);
     if (aliquotaImposto !== undefined) preco = new ComImposto(preco, aliquotaImposto);
     return preco;
   }
+  /**
+   * Desconto do pacote: a maior faixa progressiva cujo `aPartirDe` o valor de tabela
+   * alcança; sem faixa aplicável, o desconto geral. O Decorator não muda: só o percentual.
+   */
+  descontoPara(pacote: Pacote): number | undefined {
+    const { descontoPercentual, descontosProgressivos = [] } = this.configuracaoPreco;
+    const faixa = [...descontosProgressivos]
+      .filter((f) => pacote.valorBase.ehMaiorOuIgual(f.aPartirDe))
+      .sort((a, b) => b.aPartirDe.centavos - a.aPartirDe.centavos)[0];
+    return faixa?.percentual ?? descontoPercentual;
+  }
+
 
   /** Nomes dos meios de pagamento externos, na ordem de preferência do sistema, para o modal oferecer. */
   consultarMeiosPagamento(): string[] {
@@ -93,9 +119,12 @@ export class ServicoRecarga {
    * Cria a recarga com o preço recalculado no servidor (o valor exibido no
    * cliente não é confiável) e a encaminha pelo método escolhido.
    *
-   * Com `gatewayEscolhido`, usa só o meio que o espectador escolheu; se ele estiver
-   * indisponível, cancela a recarga e lança `ErroMeioPagamentoIndisponivel` com as
-   * alternativas (O07). Sem escolha, o sistema tenta os gateways em ordem.
+   * Com `gatewayEscolhido`, usa o meio que o espectador escolheu. Se ele estiver
+   * indisponível, verifica quais outros respondem agora (O07):
+   * - só um disponível: a recarga segue nele (ver `gatewayUtilizado`);
+   * - vários: cancela e lança `ErroMeioPagamentoIndisponivel` com eles, para o espectador escolher;
+   * - nenhum: cancela e lança `ErroMeioPagamentoIndisponivel` sem alternativas.
+   * Sem escolha, o sistema tenta os gateways em ordem.
    *
    * Quando não lança, devolve a recarga em um destes estados:
    * - CONCLUIDA: paga com saldo do criador;
@@ -146,20 +175,38 @@ export class ServicoRecarga {
     recarga.usuario.carteira.registrarTransacao(recarga);
   }
 
-  /** Escolha do espectador: não troca de processador sem perguntar; devolve as alternativas. */
+  /**
+   * Escolha do espectador. Se o meio cair, só troca sozinho quando há um único outro
+   * disponível (não há o que perguntar); com mais de um, devolve só os que respondem.
+   */
   private async iniciarCheckoutNoEscolhido(recarga: Recarga, gateway: GatewayPagamento): Promise<void> {
+    if (await this.tentarCheckout(recarga, gateway)) return;
+
+    const outros = this.gateways.filter((g) => g !== gateway);
+    const respostas = await Promise.all(outros.map((g) => g.estaDisponivel()));
+    const disponiveis = outros.filter((_, i) => respostas[i]);
+
+    const [unico] = disponiveis;
+    if (disponiveis.length === 1 && unico && (await this.tentarCheckout(recarga, unico))) return;
+
+    recarga.cancelarComMotivo(`${gateway.nome} indisponível`);
+    // Se o único disponível também falhou ao criar o checkout, não sobra alternativa.
+    const alternativas = disponiveis.length > 1 ? disponiveis.map((g) => g.nome) : [];
+    throw new ErroMeioPagamentoIndisponivel(gateway.nome, alternativas);
+  }
+
+  /** Cria o checkout no gateway; `false` se ele estiver indisponível. Outro erro cancela e propaga. */
+  private async tentarCheckout(recarga: Recarga, gateway: GatewayPagamento): Promise<boolean> {
+    let sessao: SessaoCheckout;
     try {
-      const sessao = await gateway.iniciarCheckout(recarga.valor, recarga.id);
-      recarga.registrarCheckout(gateway.nome, sessao.idCheckout, sessao.instrucoes);
+      sessao = await gateway.iniciarCheckout(recarga.valor, recarga.id);
     } catch (erro) {
-      if (!(erro instanceof ErroGatewayIndisponivel)) {
-        recarga.cancelarComMotivo(`falha no gateway ${gateway.nome}`);
-        throw erro;
-      }
-      recarga.cancelarComMotivo(`${gateway.nome} indisponível`);
-      const alternativas = this.gateways.filter((g) => g !== gateway).map((g) => g.nome);
-      throw new ErroMeioPagamentoIndisponivel(gateway.nome, alternativas);
+      if (erro instanceof ErroGatewayIndisponivel) return false;
+      recarga.cancelarComMotivo(`falha no gateway ${gateway.nome}`);
+      throw erro;
     }
+    recarga.registrarCheckout(gateway.nome, sessao.idCheckout, sessao.instrucoes);
+    return true;
   }
 
   /** Fallback (O07): tenta cada gateway em ordem; só indisponibilidade passa para o próximo. */

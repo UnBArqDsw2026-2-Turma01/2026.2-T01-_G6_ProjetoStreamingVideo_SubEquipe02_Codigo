@@ -1,17 +1,15 @@
-import { Dinheiro, ErroDominio, Transacao, type Usuario } from "../dominio";
+import { ErroDominio, Transacao, type Dinheiro, type Usuario } from "../dominio";
+import { REPASSE_POR_MOEDA } from "../f1-recarga";
 
 /**
  * Doação de moeda virtual (Entrega 2: Doacao especializa Transacao).
  *
  * O usuário herdado de Transacao é o doador. Ao nascer PENDENTE, calcula o valor
- * líquido repassado ao criador. Mensagem e faixa ficam em DoacaoComMensagem.
+ * repassado ao criador. Mensagem e faixa ficam em DoacaoComMensagem.
  */
 export class Doacao extends Transacao {
-  /**
-   * Percentual padrão repassado ao criador (70% do valor convertido).
-   * Cada unidade de moeda virtual equivale a 1 centavo antes da retenção da plataforma.
-   */
-  static readonly TAXA_REPASSE_PADRAO = 0.7;
+  /** Repasse por moeda vindo do catálogo da plataforma, que fica abaixo do preço de venda. */
+  static readonly REPASSE_POR_MOEDA_PADRAO = REPASSE_POR_MOEDA;
 
   readonly criador: Usuario;
   readonly quantidadeMoedaVirtual: number;
@@ -22,8 +20,7 @@ export class Doacao extends Transacao {
     doador: Usuario,
     criador: Usuario,
     quantidadeMoedaVirtual: number,
-    taxaRepasse = Doacao.TAXA_REPASSE_PADRAO,
-    moeda = "BRL",
+    repassePorMoeda: Dinheiro = Doacao.REPASSE_POR_MOEDA_PADRAO,
   ) {
     super(id, doador);
 
@@ -35,7 +32,7 @@ export class Doacao extends Transacao {
 
     this.criador = criador;
     this.quantidadeMoedaVirtual = quantidadeMoedaVirtual;
-    this.valorRepasse = this.calcularValorRepasse(taxaRepasse, moeda);
+    this.valorRepasse = this.calcularValorRepasse(repassePorMoeda);
   }
 
   /** Doador da transação (alias legível para a propriedade herdada `usuario`). */
@@ -43,11 +40,11 @@ export class Doacao extends Transacao {
     return this.usuario;
   }
 
-  /** Valor líquido que o criador recebe: taxa aplicada sobre a quantidade em centavos. */
-  calcularValorRepasse(taxa: number, moeda = "BRL"): Dinheiro {
-    if (taxa <= 0 || taxa > 1) {
-      throw new ErroDominio(`A taxa de repasse deve estar entre 0 e 1: ${taxa}`);
+  /** Valor que o criador recebe: o repasse por moeda vezes a quantidade doada (sem arredondamento). */
+  calcularValorRepasse(repassePorMoeda: Dinheiro): Dinheiro {
+    if (repassePorMoeda.centavos <= 0) {
+      throw new ErroDominio(`O repasse por moeda deve ser positivo: ${repassePorMoeda.formatar()}`);
     }
-    return Dinheiro.deCentavos(this.quantidadeMoedaVirtual, moeda).multiplicar(taxa);
+    return repassePorMoeda.multiplicar(this.quantidadeMoedaVirtual);
   }
 }

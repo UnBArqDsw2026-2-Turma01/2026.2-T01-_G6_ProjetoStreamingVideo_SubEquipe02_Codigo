@@ -153,7 +153,7 @@ async function main(): Promise<void> {
 }
 
 function descreverOferta(oferta: OfertaPacote): string {
-  return `${oferta.pacote.quantidadeMoedaVirtual} de moeda virtual — de ${oferta.precoOriginal.formatar()} por ${oferta.precoPromocional.formatar()}`;
+  return `${oferta.pacote.quantidadeMoedaVirtual} de moeda virtual — de ${oferta.precoSemDesconto.formatar()} por ${oferta.precoPromocional.formatar()}`;
 }
 
 /** ② Adapter: o espectador escolhe o meio; se ele cair, vê as alternativas e escolhe de novo. */
@@ -172,7 +172,10 @@ async function escolherMeioECriarCheckout(
 
     try {
       const recarga = await controller.recarregar(usuarioId, oferta.pacote.id, MetodoRecarga.PROCESSADOR_EXTERNO, escolhido);
-      console.log(`\n✅ Checkout criado no ${escolhido}: ${recarga.id} ${recarga.status}, ${recarga.valor.formatar()}`);
+      if (recarga.gatewayUtilizado !== escolhido) {
+        console.log(`\n⚠️  ${escolhido} indisponível; ${recarga.gatewayUtilizado} é o único meio disponível agora.`);
+      }
+      console.log(`\n✅ Checkout criado no ${recarga.gatewayUtilizado}: ${recarga.id} ${recarga.status}, ${recarga.valor.formatar()}`);
       return recarga;
     } catch (erro) {
       if (!(erro instanceof ErroMeioPagamentoIndisponivel)) throw erro;

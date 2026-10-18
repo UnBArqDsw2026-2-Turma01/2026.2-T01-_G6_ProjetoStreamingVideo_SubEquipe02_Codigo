@@ -19,6 +19,7 @@ import {
 import { FaixaDestaque, montarDoacao, type Doacao, type DoacaoController } from "../f2-doacao";
 import { Chat } from "../f3-chat";
 import { PROCESSADORES_REAIS } from "../demo/processadoresReais";
+import { GatewayDesligavel } from "./GatewayDesligavel";
 
 /** Mensagem como a página exibe no chat: comum (escrita no chat) ou destacada (vinda de uma doação). */
 export type MensagemNoChat =
@@ -60,6 +61,8 @@ interface MeioPagamento {
   readonly segredo: string;
   /** Só nos simulados: o processador em memória, para tirar do ar e simular o pagamento. */
   readonly simulador?: ProcessadorSimulado;
+  /** Só nos reais: o envoltório que permite tirar o gateway do ar na demonstração. */
+  readonly desligavel?: GatewayDesligavel;
   /** Só nos reais: como pagar no checkout de teste. */
   readonly comoPagar?: string;
 }
@@ -85,6 +88,8 @@ export class SessaoDemo {
   private mensagens!: MensagemNoChat[];
   private notificacoes!: NotificacaoCriador[];
   private ultimoAviso!: Map<string, string>;
+  /** Pedidos que foram para outro meio porque o escolhido caiu e só esse respondia (O07). */
+  private trocasDeMeio!: Map<string, string>;
   private sequenciaAviso = 0;
   /** Relógio acelerável: tempo simulado = base + tempo real decorrido × velocidade. */
   private velocidade = 1;
@@ -112,7 +117,12 @@ export class SessaoDemo {
       const segredo = `segredo-simulado-${i + 1}`;
       return { gateway: new AdaptadorProcessadorSimulado(simulador, segredo, nome), segredo, simulador };
     });
-    this.meios = new Map([...this.reais, ...simulados].map((meio) => [meio.gateway.nome, meio]));
+    // Reais envolvidos a cada reinício, para voltarem online.
+    const reais = this.reais.map((meio): MeioPagamento => {
+      const desligavel = new GatewayDesligavel(meio.gateway);
+      return { ...meio, gateway: desligavel, desligavel };
+    });
+    this.meios = new Map([...reais, ...simulados].map((meio) => [meio.gateway.nome, meio]));
     const gateways = [...this.meios.values()].map((meio) => meio.gateway);
 
     this.recargas = montarRecarga({ gateways, financeiro, usuarios, geradorId }).controller;
@@ -123,6 +133,7 @@ export class SessaoDemo {
 
     this.pedidos = new Map();
     this.ultimoAviso = new Map();
+    this.trocasDeMeio = new Map();
     this.mensagens = [];
     this.notificacoes = [];
   }
@@ -163,7 +174,7 @@ export class SessaoDemo {
       meios: [...this.meios].map(([nome, meio]) => ({
         nome,
         real: !meio.simulador,
-        online: meio.simulador?.online ?? true,
+        online: meio.simulador?.online ?? meio.desligavel?.online ?? true,
       })),
       pedido: this.pedidoAtual(),
       faixas: [FaixaDestaque.FAIXA_1, FaixaDestaque.FAIXA_2, FaixaDestaque.FAIXA_3, FaixaDestaque.FAIXA_4, FaixaDestaque.FAIXA_5],
@@ -176,23 +187,37 @@ export class SessaoDemo {
 
   /** Pacotes com o preço calculado pela cadeia de decoradores da F1, e o desconto e o imposto aplicados. */
   ofertas() {
+    const ofertas = this.recargas.consultarOfertas(this.espectador.id);
     return {
-      descontoPercentual: CONFIGURACAO_PRECO.descontoPercentual,
-      aliquotaImposto: CONFIGURACAO_PRECO.aliquotaImposto,
-      pacotes: this.recargas.consultarOfertas(this.espectador.id).map((oferta) => ({
-        id: oferta.pacote.id,
-        moedas: oferta.pacote.quantidadeMoedaVirtual,
-        precoOriginal: oferta.precoOriginal.formatar(),
-        precoPromocional: oferta.precoPromocional.formatar(),
-      })),
+      aliquotaImposto: CONFIGURACAO_PRECO.aliquotaImposto ?? 0,
+      pacotes: ofertas.map((oferta) => {
+        // Tudo vem da cadeia de decoradores. Os valores exibidos já incluem o imposto
+        // (preço final, como manda o CDC); o desconto do pacote vale sobre o preço sem
+        // desconto, então "R$ 1050,00 − 33% = R$ 703,50" fecha na tela.
+        const semImposto = oferta.precoOriginal.subtrair(oferta.precoOriginal.percentual(oferta.descontoPercentual ?? 0));
+        return {
+          id: oferta.pacote.id,
+          moedas: oferta.pacote.quantidadeMoedaVirtual,
+          precoSemDesconto: oferta.precoSemDesconto.formatar(),
+          precoPromocional: oferta.precoPromocional.formatar(),
+          descontoPercentual: oferta.descontoPercentual ?? 0,
+          valorDesconto: oferta.precoSemDesconto.subtrair(oferta.precoPromocional).formatar(),
+          valorImposto: oferta.precoPromocional.subtrair(semImposto).formatar(),
+        };
+      }),
     };
   }
 
-  /** Tira do ar (ou volta) um processador simulado, para mostrar o Adapter avisando que o meio caiu. */
+  /**
+   * Tira do ar (ou volta) um meio, para mostrar o O07: com o meio escolhido fora do ar,
+   * a página recebe as alternativas. Nos simulados cai o próprio processador (o Adapter
+   * traduz a resposta 503); nos reais, o `GatewayDesligavel` responde como indisponível.
+   */
   alternarMeio(nome: string): void {
-    const simulador = this.meios.get(nome)?.simulador;
-    if (!simulador) throw new ErroDaAcao(`Só os meios simulados podem ser tirados do ar: ${nome}`);
-    simulador.online = !simulador.online;
+    const meio = this.meios.get(nome);
+    if (!meio) throw new ErroDaAcao(`Meio de pagamento inexistente: ${nome}`);
+    if (meio.simulador) meio.simulador.online = !meio.simulador.online;
+    else if (meio.desligavel) meio.desligavel.online = !meio.desligavel.online;
   }
 
   /** Cria o pedido de recarga: preço pela cadeia de decoradores e checkout pelo adaptador do meio escolhido. */
@@ -205,6 +230,12 @@ export class SessaoDemo {
         meio,
       );
       this.pedidos.set(recarga.id, recarga);
+      if (recarga.gatewayUtilizado !== meio) {
+        this.trocasDeMeio.set(
+          recarga.id,
+          `O ${meio} está indisponível; o pedido foi para o ${recarga.gatewayUtilizado}, o único meio disponível agora.`,
+        );
+      }
     } catch (erro) {
       if (erro instanceof ErroMeioPagamentoIndisponivel) throw new ErroDaAcao(erro.message);
       throw erro;
@@ -213,6 +244,7 @@ export class SessaoDemo {
 
   /**
    * Consulta o pagamento no processador e, se aprovado, envia o aviso assinado pelo Proxy.
+   * Nos reais, a página chama esta rota sozinha a cada 5 s enquanto o pedido está pendente.
    * Nos simulados, antes aprova o pagamento, como se o espectador tivesse pago.
    * Nos reais, o espectador paga no link do checkout; como o processador não alcança
    * o localhost para chamar o webhook, o aviso é montado aqui, igual ao demo interativo da F1.
@@ -234,7 +266,7 @@ export class SessaoDemo {
       recarga.id,
       situacao.status === StatusPagamento.RECUSADO
         ? `Pagamento recusado pelo ${meio.gateway.nome}.`
-        : `Pagamento ainda não feito no ${meio.gateway.nome}.`,
+        : `O ${meio.gateway.nome} ainda não confirmou o pagamento.`,
     );
   }
 
@@ -335,6 +367,7 @@ export class SessaoDemo {
       link: real ? (recarga.instrucoesPagamento ?? "") : "",
       comoPagar: meio?.comoPagar ?? "",
       aviso: this.ultimoAviso.get(recarga.id) ?? "",
+      troca: this.trocasDeMeio.get(recarga.id) ?? "",
     };
   }
 

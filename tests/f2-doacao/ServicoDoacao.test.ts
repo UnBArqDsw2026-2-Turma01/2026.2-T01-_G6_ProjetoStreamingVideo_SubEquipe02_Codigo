@@ -34,7 +34,7 @@ describe("ServicoDoacao (Padrão GoF: Facade)", () => {
       expect(resultado.doacao.status).toBe(StatusTransacao.CONCLUIDA);
       expect(resultado.doacao).not.toBeInstanceOf(DoacaoComMensagem);
       expect(doador.carteira.saldoMoedaVirtual).toBe(2000);
-      expect(criador.carteira.saldoDinheiro.centavos).toBe(700);
+      expect(criador.carteira.saldoDinheiro.centavos).toBe(2000); // 1000 × R$ 0,02
       expect(repositorioDoacoes.buscarPorId(resultado.doacao.id)).toBe(resultado.doacao);
     });
   });
@@ -57,7 +57,7 @@ describe("ServicoDoacao (Padrão GoF: Facade)", () => {
       expect(resultado.notificacaoChatEnviada).toBe(true);
       expect(resultado.avisoChat).toBeUndefined();
       expect(doador.carteira.saldoMoedaVirtual).toBe(1000);
-      expect(criador.carteira.saldoDinheiro.centavos).toBe(1400);
+      expect(criador.carteira.saldoDinheiro.centavos).toBe(4000);
       expect(doador.carteira.historico).toContain(resultado.doacao);
       expect(criador.carteira.historico).toContain(resultado.doacao);
       expect(repositorioDoacoes.buscarPorId(resultado.doacao.id)).toBe(resultado.doacao);
@@ -154,7 +154,7 @@ describe("ServicoDoacao (Padrão GoF: Facade)", () => {
         "chat falhou ao exibir o destaque: Chat indisponível",
       );
       expect(doador.carteira.saldoMoedaVirtual).toBe(500);
-      expect(criador.carteira.saldoDinheiro.centavos).toBe(350);
+      expect(criador.carteira.saldoDinheiro.centavos).toBe(1000);
       expect(repositorioDoacoes.buscarPorId(resultado.doacao.id)).toBe(resultado.doacao);
     });
   });
