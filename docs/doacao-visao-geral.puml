@@ -11,13 +11,6 @@ hide empty members
 
 title Doação e repasse — Facade e Mediator
 
-legend top right
-  ① Facade = Client do Mediator
-  ② Client <<usa>> Mediator (setas) e Colleague (campos)
-  ③ Mediator → Colleague <<chama>>
-  Mediators usam PerfilMonetizacao.
-endlegend
-
 together {
   package "Apresentação" as APR {
     class DoacaoController <<Client>> {
