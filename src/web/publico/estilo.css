@@ -11,6 +11,9 @@ h1 { font-size: 20px; margin: 0; }
 h2 { font-size: 16px; margin: 0 0 10px; }
 header p { margin: 0; }
 header button { margin-left: 12px; }
+header .velocidade { margin-left: auto; }
+.velocidade button { margin: 0 0 0 4px; padding: 3px 10px; background: #fff; border: 1px solid #aaa; border-radius: 4px; }
+.velocidade button[aria-pressed="true"] { background: #222; border-color: #222; color: #fff; }
 
 main { display: grid; grid-template-columns: 1fr 400px; gap: 16px; align-items: start; }
 .coluna { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }

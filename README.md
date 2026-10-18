@@ -255,7 +255,7 @@ Meios de pagamento:
 - **Mercado Pago e Stripe reais (modo de teste):** aparecem quando o `.env` tem as credenciais (ver [Configurando as APIs de pagamento](#configurando-as-apis-de-pagamento-modo-de-teste)). Ao comprar, a página mostra o link do checkout; pague nele com o comprador de teste ou o cartão de teste e clique em "Verificar pagamento". Como o processador não alcança o `localhost` para chamar o webhook, a página consulta o pagamento e, se aprovado, monta o aviso assinado, que passa pelo Proxy (o mesmo que o `demo:interativo` faz).
 - **Simulado-A e Simulado-B:** funcionam sem credenciais. "Pagar" simula o pagamento, e "Fora do ar" tira o meio do ar para mostrar o Adapter avisando e sugerindo outro meio.
 
-Ao subir, o servidor diz no terminal quais processadores reais conectou. O estado fica em memória e é o mesmo para todas as abas; use "Reiniciar" para começar do zero.
+Os botões de velocidade (1x, 2x, 10x e 100x) aceleram o relógio da demonstração, para ver a fixação das mensagens acabar sem esperar o tempo real. Ao subir, o servidor diz no terminal quais processadores reais conectou. O estado fica em memória e é o mesmo para todas as abas; use "Reiniciar" para começar do zero.
 
 ---
 

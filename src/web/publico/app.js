@@ -212,10 +212,11 @@ function renderizarNotificacoes(notificacoes) {
 // Chat (F3)
 
 let mensagens = [];
-let diferencaRelogio = 0; // relógio do servidor menos o do navegador
 let chaveFixadas = "";
+// Relógio da demonstração no servidor (acelerável): hora recebida, quando chegou e a velocidade.
+const relogio = { agora: Date.now(), recebidoEm: Date.now(), velocidade: 1 };
 
-const agoraNoServidor = () => Date.now() + diferencaRelogio;
+const agoraNoServidor = () => relogio.agora + (Date.now() - relogio.recebidoEm) * relogio.velocidade;
 
 function itemDoChat(m) {
   if (m.tipo === "comum") return el("li", {}, el("b", {}, `${m.autor}: `), m.texto);
@@ -262,9 +263,9 @@ function renderizarFixadas() {
   }
 }
 
-function renderizarChat(lista, agora) {
+function renderizarChat(lista, agora, velocidade) {
   mensagens = lista;
-  diferencaRelogio = agora - Date.now();
+  Object.assign(relogio, { agora, recebidoEm: Date.now(), velocidade });
   renderizarFixadas();
   const ul = $("mensagens");
   const noFim = ul.scrollHeight - ul.scrollTop - ul.clientHeight < 30;
@@ -272,7 +273,23 @@ function renderizarChat(lista, agora) {
   if (noFim) ul.scrollTop = ul.scrollHeight;
 }
 
-setInterval(renderizarFixadas, 1000);
+setInterval(renderizarFixadas, 200);
+
+function renderizarVelocidades(atual) {
+  $("velocidades").replaceChildren(
+    ...[1, 2, 10, 100].map((v) =>
+      el(
+        "button",
+        {
+          type: "button",
+          "aria-pressed": v === atual ? "true" : "false",
+          onclick: () => agir(null, "POST", "/api/velocidade", { velocidade: v }),
+        },
+        `${v}x`,
+      ),
+    ),
+  );
+}
 
 // Tela
 
@@ -284,7 +301,8 @@ function renderizar(estado) {
   renderizarPedido(estado.pedido);
   renderizarCanais(estado.canais);
   renderizarNotificacoes(estado.notificacoes);
-  renderizarChat(estado.mensagens, estado.agora);
+  renderizarChat(estado.mensagens, estado.agora, estado.velocidade);
+  renderizarVelocidades(estado.velocidade);
   atualizarFaixa();
 }
 

@@ -45,6 +45,9 @@ export interface NotificacaoCriador {
   readonly em: number;
 }
 
+/** Velocidades do relógio da demonstração (só a fixação das mensagens depende do tempo). */
+export const VELOCIDADES = [1, 2, 10, 100] as const;
+
 /** Tamanho máximo de uma mensagem comum do chat. */
 const LIMITE_MENSAGEM_COMUM = 200;
 
@@ -83,6 +86,10 @@ export class SessaoDemo {
   private notificacoes!: NotificacaoCriador[];
   private ultimoAviso!: Map<string, string>;
   private sequenciaAviso = 0;
+  /** Relógio acelerável: tempo simulado = base + tempo real decorrido × velocidade. */
+  private velocidade = 1;
+  private baseReal = Date.now();
+  private baseSimulada = Date.now();
 
   constructor() {
     this.reiniciar();
@@ -162,7 +169,8 @@ export class SessaoDemo {
       faixas: [FaixaDestaque.FAIXA_1, FaixaDestaque.FAIXA_2, FaixaDestaque.FAIXA_3, FaixaDestaque.FAIXA_4, FaixaDestaque.FAIXA_5],
       mensagens: this.mensagens,
       notificacoes: [...this.notificacoes].reverse(),
-      agora: Date.now(),
+      agora: this.agora(),
+      velocidade: this.velocidade,
     };
   }
 
@@ -250,7 +258,7 @@ export class SessaoDemo {
     const exibida = this.chat.mensagensExibidas().at(-1);
     if (resultado.notificacaoChatEnviada && exibida) {
       const minutos = exibida.tempoFixacaoMin();
-      const agora = Date.now();
+      const agora = this.agora();
       this.mensagens.push({
         tipo: "destacada",
         id: resultado.doacao.id,
@@ -284,6 +292,21 @@ export class SessaoDemo {
       repasse: doacao.valorRepasse.formatar(),
       em: Date.now(),
     });
+  }
+
+  /** Acelera (ou volta ao normal) o relógio da demonstração, sem saltar o tempo já decorrido. */
+  definirVelocidade(velocidade: number): void {
+    if (!VELOCIDADES.includes(velocidade as (typeof VELOCIDADES)[number])) {
+      throw new ErroDaAcao(`Velocidade inválida: ${velocidade}. Use ${VELOCIDADES.join(", ")}.`);
+    }
+    this.baseSimulada = this.agora();
+    this.baseReal = Date.now();
+    this.velocidade = velocidade;
+  }
+
+  /** Hora do relógio da demonstração, em epoch ms. */
+  private agora(): number {
+    return this.baseSimulada + (Date.now() - this.baseReal) * this.velocidade;
   }
 
   /** Mensagem comum, escrita direto no chat, sem doação. */

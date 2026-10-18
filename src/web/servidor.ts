@@ -38,6 +38,7 @@ const rotas: Record<string, Rota> = {
   "POST /api/doacoes": (c) =>
     sessao.doar(texto(c.canalId, "o canal"), Number(c.quantidade), typeof c.mensagem === "string" ? c.mensagem : ""),
   "POST /api/chat": (c) => sessao.escrever(typeof c.texto === "string" ? c.texto : ""),
+  "POST /api/velocidade": (c) => sessao.definirVelocidade(Number(c.velocidade)),
   "POST /api/reiniciar": () => sessao.reiniciar(),
 };
 
