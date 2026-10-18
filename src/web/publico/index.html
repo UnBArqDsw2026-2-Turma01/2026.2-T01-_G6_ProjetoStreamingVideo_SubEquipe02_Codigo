@@ -20,10 +20,12 @@
     <div class="coluna">
       <section>
         <h2>Recarga (F1)</h2>
-        <label>Pacote
-          <select id="pacote"></select>
-        </label>
-        <p class="nota" id="composicao"></p>
+        <p class="rotulo">
+          Pacote
+          <span class="off" id="desconto"></span>
+          <span class="nota" id="imposto"></span>
+        </p>
+        <div class="pacotes" id="pacotes"></div>
 
         <label>Meio de pagamento
           <select id="meio"></select>
@@ -32,8 +34,7 @@
 
         <button type="button" id="comprar">Comprar</button>
         <p class="erro" id="erro-recarga" hidden></p>
-
-        <div id="pedidos"></div>
+        <div id="pedido"></div>
       </section>
 
       <section>
@@ -41,9 +42,9 @@
         <label>Canal
           <select id="canal"></select>
         </label>
-        <label>Quantidade de moeda virtual
-          <input id="quantidade" type="number" min="200" step="50" value="2000">
-        </label>
+        <p class="rotulo">Quantidade de moeda virtual</p>
+        <div class="valores" id="valores"></div>
+        <input id="quantidade" type="number" min="200" step="50" value="2000" placeholder="Outro valor" aria-label="Outro valor">
         <p class="nota" id="faixa"></p>
         <label>Mensagem
           <textarea id="mensagem" rows="3"></textarea>
@@ -51,6 +52,11 @@
         <p class="nota" id="contador"></p>
         <button type="button" id="doar">Doar</button>
         <p class="erro" id="erro-doacao" hidden></p>
+      </section>
+
+      <section class="largo">
+        <h2>Notificações do criador</h2>
+        <ul id="notificacoes"></ul>
       </section>
     </div>
 

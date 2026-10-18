@@ -35,7 +35,6 @@ const rotas: Record<string, Rota> = {
   "POST /api/meios/alternar": (c) => sessao.alternarMeio(texto(c.nome, "o meio de pagamento")),
   "POST /api/recargas": (c) => sessao.comprar(texto(c.pacoteId, "o pacote"), texto(c.meio, "o meio de pagamento")),
   "POST /api/recargas/verificar": (c) => sessao.verificarPagamento(texto(c.recargaId, "o pedido")),
-  "POST /api/recargas/reenviar-aviso": (c) => sessao.reenviarAviso(texto(c.recargaId, "o pedido")),
   "POST /api/doacoes": (c) =>
     sessao.doar(texto(c.canalId, "o canal"), Number(c.quantidade), typeof c.mensagem === "string" ? c.mensagem : ""),
   "POST /api/chat": (c) => sessao.escrever(typeof c.texto === "string" ? c.texto : ""),

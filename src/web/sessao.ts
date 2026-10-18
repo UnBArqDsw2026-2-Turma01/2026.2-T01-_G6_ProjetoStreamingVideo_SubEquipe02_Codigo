@@ -3,6 +3,8 @@ import { Usuario } from "../dominio";
 import { ServicoFinanceiro } from "../financeiro";
 import {
   AdaptadorProcessadorSimulado,
+  CONFIGURACAO_PRECO,
+  EfeitoConfirmacao,
   ErroMeioPagamentoIndisponivel,
   MetodoRecarga,
   ProcessadorSimulado,
@@ -23,6 +25,7 @@ export type MensagemNoChat =
   | { readonly tipo: "comum"; readonly autor: string; readonly texto: string }
   | {
       readonly tipo: "destacada";
+      readonly id: string;
       readonly autor: string;
       readonly quantidade: number;
       readonly texto: string;
@@ -32,6 +35,15 @@ export type MensagemNoChat =
       /** Até quando a mensagem fica fixada no topo, pelo decorador ComFixacao (epoch ms; null = não fixa). */
       readonly fixadaAte: number | null;
     };
+
+/** Doação recebida com sucesso, como aparece no painel de notificações do criador. */
+export interface NotificacaoCriador {
+  readonly autor: string;
+  readonly canal: string;
+  readonly quantidade: number;
+  readonly repasse: string;
+  readonly em: number;
+}
 
 /** Tamanho máximo de uma mensagem comum do chat. */
 const LIMITE_MENSAGEM_COMUM = 200;
@@ -68,6 +80,7 @@ export class SessaoDemo {
   private reais: MeioPagamento[] = [];
   private pedidos!: Map<string, Recarga>;
   private mensagens!: MensagemNoChat[];
+  private notificacoes!: NotificacaoCriador[];
   private ultimoAviso!: Map<string, string>;
   private sequenciaAviso = 0;
 
@@ -104,6 +117,7 @@ export class SessaoDemo {
     this.pedidos = new Map();
     this.ultimoAviso = new Map();
     this.mensagens = [];
+    this.notificacoes = [];
   }
 
   /**
@@ -144,34 +158,26 @@ export class SessaoDemo {
         real: !meio.simulador,
         online: meio.simulador?.online ?? true,
       })),
-      pedidos: [...this.pedidos.values()].reverse().map((r) => {
-        const meio = r.gatewayUtilizado ? this.meios.get(r.gatewayUtilizado) : undefined;
-        return {
-          id: r.id,
-          moedas: r.quantidadeMoedaVirtual,
-          valor: r.valor.formatar(),
-          meio: r.gatewayUtilizado ?? "",
-          status: r.status,
-          real: Boolean(meio && !meio.simulador),
-          link: meio && !meio.simulador ? (r.instrucoesPagamento ?? "") : "",
-          comoPagar: meio?.comoPagar ?? "",
-          aviso: this.ultimoAviso.get(r.id) ?? "",
-        };
-      }),
+      pedido: this.pedidoAtual(),
       faixas: [FaixaDestaque.FAIXA_1, FaixaDestaque.FAIXA_2, FaixaDestaque.FAIXA_3, FaixaDestaque.FAIXA_4, FaixaDestaque.FAIXA_5],
       mensagens: this.mensagens,
+      notificacoes: [...this.notificacoes].reverse(),
       agora: Date.now(),
     };
   }
 
+  /** Pacotes com o preço calculado pela cadeia de decoradores da F1, e o desconto e o imposto aplicados. */
   ofertas() {
-    return this.recargas.consultarOfertas(this.espectador.id).map((oferta) => ({
-      id: oferta.pacote.id,
-      moedas: oferta.pacote.quantidadeMoedaVirtual,
-      precoOriginal: oferta.precoOriginal.formatar(),
-      precoPromocional: oferta.precoPromocional.formatar(),
-      composicao: oferta.composicao,
-    }));
+    return {
+      descontoPercentual: CONFIGURACAO_PRECO.descontoPercentual,
+      aliquotaImposto: CONFIGURACAO_PRECO.aliquotaImposto,
+      pacotes: this.recargas.consultarOfertas(this.espectador.id).map((oferta) => ({
+        id: oferta.pacote.id,
+        moedas: oferta.pacote.quantidadeMoedaVirtual,
+        precoOriginal: oferta.precoOriginal.formatar(),
+        precoPromocional: oferta.precoPromocional.formatar(),
+      })),
+    };
   }
 
   /** Tira do ar (ou volta) um processador simulado, para mostrar o Adapter avisando que o meio caiu. */
@@ -213,7 +219,7 @@ export class SessaoDemo {
       throw new ErroDaAcao(`Não foi possível consultar o ${meio.gateway.nome}: ${erro instanceof Error ? erro.message : erro}`);
     }
     if (situacao.status === StatusPagamento.APROVADO) {
-      await this.avisar(recarga, meio.segredo, "Aviso de pagamento");
+      await this.avisar(recarga, meio.segredo);
       return;
     }
     this.ultimoAviso.set(
@@ -222,12 +228,6 @@ export class SessaoDemo {
         ? `Pagamento recusado pelo ${meio.gateway.nome}.`
         : `Pagamento ainda não feito no ${meio.gateway.nome}.`,
     );
-  }
-
-  /** Reenvia um aviso legítimo do mesmo pagamento, como o processador faz quando não recebe resposta (O11). */
-  async reenviarAviso(recargaId: string): Promise<void> {
-    const { recarga, meio } = this.pedido(recargaId);
-    await this.avisar(recarga, meio.segredo, "Reenvio do aviso");
   }
 
   /** Doação com mensagem pela Facade da F2, que notifica o chat da F3 e faz o repasse. */
@@ -246,6 +246,7 @@ export class SessaoDemo {
       const agora = Date.now();
       this.mensagens.push({
         tipo: "destacada",
+        id: resultado.doacao.id,
         autor: resultado.doacao.doador.nome,
         quantidade: resultado.doacao.quantidadeMoedaVirtual,
         texto: exibida.texto(),
@@ -254,6 +255,14 @@ export class SessaoDemo {
         fixadaAte: minutos > 0 ? agora + minutos * 60_000 : null,
       });
     }
+
+    this.notificacoes.push({
+      autor: resultado.doacao.doador.nome,
+      canal: resultado.doacao.criador.nome,
+      quantidade: resultado.doacao.quantidadeMoedaVirtual,
+      repasse: resultado.doacao.valorRepasse.formatar(),
+      em: Date.now(),
+    });
   }
 
   /** Mensagem comum, escrita direto no chat, sem doação. */
@@ -266,7 +275,27 @@ export class SessaoDemo {
     this.mensagens.push({ tipo: "comum", autor: this.espectador.nome, texto: limpo });
   }
 
-  private async avisar(recarga: Recarga, segredo: string, descricao: string): Promise<void> {
+  /** Último pedido de recarga, que é o único que a página mostra. */
+  private pedidoAtual() {
+    const recarga = [...this.pedidos.values()].at(-1);
+    if (!recarga) return null;
+    const meio = recarga.gatewayUtilizado ? this.meios.get(recarga.gatewayUtilizado) : undefined;
+    const real = Boolean(meio && !meio.simulador);
+    return {
+      id: recarga.id,
+      moedas: recarga.quantidadeMoedaVirtual,
+      valor: recarga.valor.formatar(),
+      meio: recarga.gatewayUtilizado ?? "",
+      status: recarga.status,
+      real,
+      link: real ? (recarga.instrucoesPagamento ?? "") : "",
+      comoPagar: meio?.comoPagar ?? "",
+      aviso: this.ultimoAviso.get(recarga.id) ?? "",
+    };
+  }
+
+  /** Envia o aviso de pagamento assinado, que passa pelo Proxy da F1 antes de creditar. */
+  private async avisar(recarga: Recarga, segredo: string): Promise<void> {
     const dados = {
       idEvento: `ev-${++this.sequenciaAviso}`,
       idPagamento: recarga.idCheckout!,
@@ -274,7 +303,8 @@ export class SessaoDemo {
     };
     const aviso: NotificacaoPagamento = { ...dados, assinatura: assinarNotificacao(segredo, dados) };
     const resultado = await this.recargas.receberWebhook(recarga.gatewayUtilizado!, aviso);
-    this.ultimoAviso.set(recarga.id, `${descricao}: ${resultado.efeito} (${resultado.motivo})`);
+    if (resultado.efeito === EfeitoConfirmacao.CREDITADO) this.ultimoAviso.delete(recarga.id);
+    else this.ultimoAviso.set(recarga.id, `O pagamento não foi confirmado (${resultado.motivo}).`);
   }
 
   private pedido(recargaId: string): { recarga: Recarga; meio: MeioPagamento } {
