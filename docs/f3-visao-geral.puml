@@ -56,7 +56,7 @@ class Chat <<Client>> {
 interface MensagemDestacada <<interface>> <<Component>> {
   +cabecalho(): string
   +texto(): string
-  +cor(): string | null
+  +cor(): string [0..1]
   +tempoFixacaoMin(): number
   +descrever(): string
 }
@@ -67,7 +67,7 @@ class MensagemBase <<ConcreteComponent>> {
   -quantidadeMoedaVirtual: number
   +cabecalho(): string
   +texto(): string
-  +cor(): string | null
+  +cor(): string [0..1]
   +tempoFixacaoMin(): number
   +descrever(): string
 }
@@ -76,7 +76,7 @@ abstract class MensagemDecorator <<Decorator>> {
   #interna: MensagemDestacada
   +cabecalho(): string
   +texto(): string
-  +cor(): string | null
+  +cor(): string [0..1]
   +tempoFixacaoMin(): number
   +descrever(): string
 }
