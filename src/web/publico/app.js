@@ -159,13 +159,18 @@ function renderizarValores() {
   );
 }
 
+/**
+ * Com mensagem, a doação segue a faixa (mínimo de 200 moedas). Abaixo disso, ou com a
+ * mensagem em branco, vai como doação simples, sem passar pelo chat.
+ */
 function atualizarFaixa() {
   const faixa = faixaDe(Number($("quantidade").value));
   const tamanho = Array.from($("mensagem").value).length;
   renderizarValores();
+  $("mensagem").disabled = !faixa;
   if (!faixa) {
-    $("faixa").textContent = `O mínimo é ${faixas[0]?.quantidadeMinima ?? 200} moedas.`;
-    $("contador").textContent = `${tamanho} caracteres`;
+    $("faixa").textContent = `Abaixo de ${faixas[0]?.quantidadeMinima ?? 200} moedas, a doação vai sem mensagem.`;
+    $("contador").textContent = "";
     return;
   }
   const minutos = faixa.tempoFixacaoMin;
@@ -173,7 +178,9 @@ function atualizarFaixa() {
     ? `Fica fixada no chat por ${minutos >= 60 ? `${minutos / 60} h` : `${minutos} min`}.`
     : "Não fica fixada no chat.";
   $("faixa").textContent = `${fixacao} Até ${faixa.limiteCaracteres} caracteres.`;
-  $("contador").textContent = `${tamanho}/${faixa.limiteCaracteres} caracteres`;
+  $("contador").textContent = tamanho
+    ? `${tamanho}/${faixa.limiteCaracteres} caracteres`
+    : "Opcional. Sem mensagem, a doação não aparece no chat.";
 }
 
 function renderizarCanais(canais) {
@@ -292,7 +299,7 @@ $("doar").addEventListener("click", () =>
   agir("erro-doacao", "POST", "/api/doacoes", {
     canalId: $("canal").value,
     quantidade: Number($("quantidade").value),
-    mensagem: $("mensagem").value,
+    mensagem: $("mensagem").disabled ? "" : $("mensagem").value,
   }),
 );
 

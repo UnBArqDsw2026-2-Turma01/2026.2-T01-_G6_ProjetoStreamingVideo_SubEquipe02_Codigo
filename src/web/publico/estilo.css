@@ -49,6 +49,7 @@ button { font: inherit; padding: 5px 12px; cursor: pointer; }
 .valor { flex: 1; padding: 4px 0; background: #fff; border: 2px solid var(--cor); border-radius: 4px; }
 .valor[aria-pressed="true"] { background: var(--cor); color: #fff; }
 #quantidade { margin: 0 0 6px; }
+textarea:disabled { background: #eee; }
 
 /* Notificações do criador */
 #notificacoes { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow-y: auto; }

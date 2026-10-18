@@ -16,7 +16,7 @@ import {
   type Recarga,
   type RecargaController,
 } from "../f1-recarga";
-import { FaixaDestaque, montarDoacao, type DoacaoController } from "../f2-doacao";
+import { FaixaDestaque, montarDoacao, type Doacao, type DoacaoController } from "../f2-doacao";
 import { Chat } from "../f3-chat";
 import { PROCESSADORES_REAIS } from "../demo/processadoresReais";
 
@@ -230,14 +230,21 @@ export class SessaoDemo {
     );
   }
 
-  /** Doação com mensagem pela Facade da F2, que notifica o chat da F3 e faz o repasse. */
+  /**
+   * Doação pela Facade da F2. Com mensagem, usa a doação com mensagem destacada, que
+   * notifica o chat da F3 (mínimo de 200 moedas, pela faixa). Sem mensagem, usa a doação
+   * simples, que não passa pelo chat e aceita qualquer quantidade.
+   */
   doar(canalId: string, quantidade: number, mensagem: string): void {
-    let resultado;
-    try {
-      resultado = this.doacoes.doarComMensagem(this.espectador.id, canalId, quantidade, mensagem);
-    } catch (erro) {
-      throw new ErroDaAcao(erro instanceof Error ? erro.message : String(erro));
+    if (mensagem.trim() === "") {
+      const { doacao } = this.executarDoacao(() => this.doacoes.doar(this.espectador.id, canalId, quantidade));
+      this.notificarCriador(doacao);
+      return;
     }
+
+    const resultado = this.executarDoacao(() =>
+      this.doacoes.doarComMensagem(this.espectador.id, canalId, quantidade, mensagem),
+    );
 
     // A página aplica o que a pilha de decoradores da F3 devolveu: a cor e o tempo de fixação.
     const exibida = this.chat.mensagensExibidas().at(-1);
@@ -256,11 +263,25 @@ export class SessaoDemo {
       });
     }
 
+    this.notificarCriador(resultado.doacao);
+  }
+
+  /** Executa a doação na F2, trazendo as recusas de regra de negócio para a página. */
+  private executarDoacao<T>(doacao: () => T): T {
+    try {
+      return doacao();
+    } catch (erro) {
+      throw new ErroDaAcao(erro instanceof Error ? erro.message : String(erro));
+    }
+  }
+
+  /** Registra a doação concluída no painel de notificações do criador. */
+  private notificarCriador(doacao: Doacao): void {
     this.notificacoes.push({
-      autor: resultado.doacao.doador.nome,
-      canal: resultado.doacao.criador.nome,
-      quantidade: resultado.doacao.quantidadeMoedaVirtual,
-      repasse: resultado.doacao.valorRepasse.formatar(),
+      autor: doacao.doador.nome,
+      canal: doacao.criador.nome,
+      quantidade: doacao.quantidadeMoedaVirtual,
+      repasse: doacao.valorRepasse.formatar(),
       em: Date.now(),
     });
   }

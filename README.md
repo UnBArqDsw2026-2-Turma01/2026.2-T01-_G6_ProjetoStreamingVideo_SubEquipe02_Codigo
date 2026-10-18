@@ -246,7 +246,7 @@ A mesma história em uma página web, servida por um servidor HTTP mínimo (`src
 | Parte da tela | Frente e padrões |
 | -- | -- |
 | Recarga (F1) | Pacotes com o preço calculado em camadas (Decorator), escolha do meio de pagamento (Adapter) e aviso de pagamento verificado antes de creditar (Proxy). Mostra só o último pedido. |
-| Doação (F2) | Facade com Mediator, com as regras de canal monetizado, saldo e limite de caracteres. Atalhos com o mínimo de cada faixa, ou qualquer outro valor. |
+| Doação (F2) | Facade com Mediator, com as regras de canal monetizado, saldo e limite de caracteres. Atalhos com o mínimo de cada faixa, ou qualquer outro valor. A mensagem é opcional: sem ela (ou abaixo de 200 moedas) a página usa a doação simples da F2, que não passa pelo chat. |
 | Notificações do criador | Doações recebidas com sucesso e o repasse de cada uma. |
 | Chat (F3) | Mensagem destacada montada pelo Decorator: a página pinta a mensagem com a cor devolvida por `ComFaixaCor` e a mantém fixada no topo do chat, em versão compacta (o hover mostra a mensagem inteira), pelo tempo de `ComFixacao`; `ComLimiteCaracteres` recusa a mensagem acima do limite. Também dá para escrever mensagens comuns. |
 
