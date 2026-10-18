@@ -15,6 +15,9 @@ Organizada como uma história de uso da plataforma:
 ```bash
 npm install
 npm run demo         # história completa no terminal (processadores simulados, sem internet)
+npm run web          # front-end da história completa em http://localhost:3000
+npm run demo:f2      # F2 sozinha no terminal
+npm run demo:f3      # F3 sozinha no terminal
 npm run demo:mp      # F1 com o Mercado Pago real, em conta de teste (ver abaixo)
 npm run demo:stripe  # F1 com o Stripe real, em modo de teste (ver abaixo)
 npm run demo:interativo  # F1 no terminal: você é o espectador e escolhe pacote e meio de pagamento
@@ -235,6 +238,19 @@ A demonstração executável (`npm run demo`) integra a narrativa em 4 etapas no
 2. **Doação com mensagem (F2):** débito/crédito atômico e orquestração da doação via Facade.
 3. **Mensagem destacada no chat (F3):** exibição decorada no chat (assíncrona, paralela ao passo 4).
 4. **Repasse ao criador (F2):** acionado pela doação, independente da exibição no chat (coerente com a regra da modelagem da Entrega 2).
+
+### Front-end (`npm run web`)
+
+A mesma história em uma página web, servida por um servidor HTTP mínimo (`src/web/servidor.ts`, só módulos do Node) que chama o código real das três frentes. Abra `http://localhost:3000` (outra porta: `PORT=3001 npm run web`).
+
+| Parte da tela | Frente e padrões |
+| -- | -- |
+| Comprar moeda virtual | F1: preço em camadas (Decorator), escolha do meio de pagamento (Adapter) e aviso de pagamento verificado (Proxy). Os botões "Simular aviso falso" e "Reenviar o aviso" mostram o Proxy barrando fraude (O14) e duplicidade (O11). |
+| Doar com mensagem | F2: Facade com Mediator, com as regras de canal monetizado, saldo e limite de caracteres. |
+| Chat ao vivo | F3: mensagem montada pelo Decorator (limite, cor da faixa e fixação), com as fixadas no topo. |
+| Padrões em ação | Registro de qual padrão agiu em cada passo. |
+
+O pagamento usa os processadores simulados da F1 ("Processador A" e "Processador B"), porque os reais precisam de credenciais e de uma URL pública para o aviso de pagamento. O estado fica em memória e é o mesmo para todas as abas; use "Reiniciar demonstração" para começar do zero.
 
 ---
 
