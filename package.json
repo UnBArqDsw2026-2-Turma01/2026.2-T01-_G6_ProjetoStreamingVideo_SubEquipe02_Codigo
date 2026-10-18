@@ -6,6 +6,7 @@
   "scripts": {
     "test": "jest",
     "demo": "tsx src/demo/historia-completa.ts",
+    "web": "tsx src/web/servidor.ts",
     "demo:f2": "tsx src/demo/demo-f2.ts",
     "demo:f3": "tsx src/demo/demo-f3.ts",
     "demo:mp": "tsx src/demo/f1-pagamento-real.ts mercadopago",
