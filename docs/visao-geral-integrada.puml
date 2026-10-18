@@ -11,7 +11,7 @@ skinparam packageBorderThickness 1.5
 top to bottom direction
 hide empty members
 
-title Visão geral integrada — domínio, recarga e doação
+title Visão geral integrada — domínio, recarga, doação e chat
 
 package "1. Domínio" as DOM #F3E8FC {
   abstract class Transacao
@@ -23,19 +23,48 @@ package "1. Domínio" as DOM #F3E8FC {
   class Carteira
   class Dinheiro <<value object>>
 
+  class Chat <<Client>>
+  class FaixaDestaque
+  interface PropriedadesFaixa
+
   Transacao <|-- Recarga
   Transacao <|-- Doacao
   Transacao <|-- Saque
   Doacao <|-- DoacaoComMensagem
   Transacao --> Usuario
   Usuario *-- Carteira
+
+  Transacao -[hidden]right- Chat
+  Chat ..> FaixaDestaque : <<consulta>>
+  FaixaDestaque ..> PropriedadesFaixa
+  FaixaDestaque -[hidden]right- PropriedadesFaixa
 }
+
+package "Mensagem destacada" as MSG #E8F4EA {
+  interface MensagemDestacada <<Component>>
+  class MensagemBase <<ConcreteComponent>>
+  abstract class MensagemDecorator <<Decorator>>
+  class ComFaixaCor <<ConcreteDecorator>>
+  class ComFixacao <<ConcreteDecorator>>
+  class ComLimiteCaracteres <<ConcreteDecorator>>
+
+  MensagemDestacada <|.. MensagemBase
+  MensagemDestacada <|.. MensagemDecorator
+  MensagemDecorator o--> MensagemDestacada
+  MensagemDecorator <|-- ComFaixaCor
+  MensagemDecorator <|-- ComFixacao
+  MensagemDecorator <|-- ComLimiteCaracteres
+}
+
+Chat ..> MensagemDestacada : <<cria e usa>>
+DOM -[hidden]right- MSG
+Chat -[hidden]right- MensagemDestacada
 
 package "2. Catálogo, preço e pagamento" as INT {
   package "Catálogo" as CAT #EDE7F6 {
     class catalogo <<módulo>>
-    interface Pacote
-    interface ConfiguracaoPreco
+    class Pacote <<dataType>>
+    class ConfiguracaoPreco <<dataType>>
     catalogo --> Pacote
     catalogo --> ConfiguracaoPreco
   }
@@ -75,30 +104,24 @@ package "2. Catálogo, preço e pagamento" as INT {
 package "3. Aplicação" as APL {
   package "Recarga" as REC {
     class ServicoRecarga <<control>>
-    note bottom of ServicoRecarga
-      depende de catalogo, preco e gateway
-      webhook de confirmacao
-      cria entidade de recarga
-    end note
   }
   package "Doação" as DOA #FCE4EC {
     class ServicoDoacao <<Facade>>
     class MediatorDoacao <<Mediator>>
     class MediatorDoacaoComMensagem <<Mediator>>
+    interface NotificadorChat <<contrato>>
+    interface DoacaoNotificada <<contrato>>
 
     MediatorDoacao -[hidden]right- MediatorDoacaoComMensagem
     ServicoDoacao -[hidden]down- MediatorDoacao
     ServicoDoacao -[hidden]down- MediatorDoacaoComMensagem
+    MediatorDoacaoComMensagem -[hidden]down- NotificadorChat
+    NotificadorChat -[hidden]right- DoacaoNotificada
 
-    ServicoDoacao -down-> MediatorDoacao : <<usa>>
-    ServicoDoacao -down-> MediatorDoacaoComMensagem : <<usa>>
-
-    note bottom of ServicoDoacao
-      Facade usa o colleague financeiro
-      Mediators chamam o colleague
-      cria entidades de doacao
-      (detalhe: doacao-visao-geral)
-    end note
+    ServicoDoacao -down-> MediatorDoacao
+    ServicoDoacao -down-> MediatorDoacaoComMensagem
+    MediatorDoacaoComMensagem -down-> NotificadorChat : <<chama>>
+    NotificadorChat ..> DoacaoNotificada
   }
   ServicoRecarga -[hidden]right- ServicoDoacao
 }
@@ -109,11 +132,11 @@ package "4. Apresentação" as APR {
   RecargaController -[hidden]right- DoacaoController
 }
 
-' Empilhamento vertical estrito
 Recarga -[hidden]down- Pacote
 Doacao -[hidden]down- Preco
 Saque -[hidden]down- GatewayPagamento
 Carteira -[hidden]down- ServicoFinanceiro
+MensagemDestacada -[hidden]down- Preco
 Pacote -[hidden]down- ServicoRecarga
 GatewayPagamento -[hidden]down- ServicoDoacao
 ServicoRecarga -[hidden]down- RecargaController
@@ -122,10 +145,7 @@ ServicoDoacao -[hidden]down- DoacaoController
 RecargaController -up-> ServicoRecarga
 DoacaoController -up-> ServicoDoacao
 
-legend bottom
-  Recarga: f1-visao-geral.puml  |  Doação: doacao-visao-geral.puml
-  Mediator: Client <<usa>> Mediator/Colleague ; Mediator → Colleague <<chama>>
-  Associações longas entre pacotes: ver notas em Recarga e Doação
-endlegend
+Chat ..|> NotificadorChat
+Doacao ..> catalogo : <<usa>>
 
 @enduml
