@@ -137,7 +137,7 @@ end note
 
 note bottom of PkgSim
   Código 503 → ErroGatewayIndisponivel;
-  texto "PAGO;recarga-1;746" → SituacaoPagamento.
+  texto "PAGO;recarga-1;966" → SituacaoPagamento.
   Testes e demonstração sem internet.
 end note
 @enduml

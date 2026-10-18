@@ -45,7 +45,7 @@ package "Serviços de Aplicação" {
     -gateways: GatewayPagamento[]
     +consultarOfertas(usuario: Usuario): OfertaPacote[]
     +consultarMeiosPagamento(): string[]
-    +montarPreco(pacote: Pacote, comDesconto = true): Preco
+    +montarPreco(pacote: Pacote, comDesconto: boolean = true): Preco
     +descontoPara(pacote: Pacote): number [0..1]
     +processarRecarga(usuario: Usuario, pacote: Pacote, metodo: MetodoRecarga, gatewayEscolhido?: string): Promise<Recarga>
   }
@@ -53,10 +53,10 @@ package "Serviços de Aplicação" {
 
 package "Catálogo da plataforma" #F3E8FC {
   class catalogo <<módulo>> {
-    +MOEDAS_POR_REAL = 20
+    +MOEDAS_POR_REAL: number = 20
     +PACOTES: Pacote[]
     +CONFIGURACAO_PRECO: ConfiguracaoPreco
-    +REPASSE_POR_MOEDA = R$ 0,02
+    +REPASSE_POR_MOEDA: Dinheiro = R$ 0,02
   }
   class Pacote <<dataType>> {
     +id: string
@@ -65,9 +65,12 @@ package "Catálogo da plataforma" #F3E8FC {
   }
   class ConfiguracaoPreco <<dataType>> {
     +descontoPercentual: number [0..1] {0 < valor < 100}
-    +descontosProgressivos: FaixaDesconto[] [0..1] {aPartirDe: Dinheiro, percentual: number}
     +taxaFixa: Dinheiro [0..1] {valor > 0}
     +aliquotaImposto: number [0..1] {valor > 0}
+  }
+  class FaixaDesconto <<dataType>> {
+    +aPartirDe: Dinheiro
+    +percentual: number {0 < valor < 100}
   }
   class OfertaPacote <<dataType>> {
     +pacote: Pacote
@@ -265,6 +268,7 @@ package "Domínio" {
 ' ---- Catálogo
 catalogo -down-> "1..*" Pacote
 catalogo -down-> "1" ConfiguracaoPreco
+ConfiguracaoPreco -down-> "0..*" FaixaDesconto : descontosProgressivos
 OfertaPacote -down-> "1" Pacote
 
 ' ---- Decorator
@@ -340,6 +344,8 @@ note bottom of ComTaxaFixa
   Ordem fixa em montarPreco:
   desconto → taxa fixa → imposto (tudo em BRL).
   Preço original = PrecoPacote.calcular()
+  Preço riscado = mesma cadeia sem ComDesconto
+  (montarPreco(pacote, false) → precoSemDesconto)
   Preço promocional = cadeia completa.calcular()
 end note
 

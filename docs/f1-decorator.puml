@@ -20,15 +20,17 @@ package "Serviços de Aplicação" {
     -pacotes: Pacote[]
     -configuracaoPreco: ConfiguracaoPreco
     +consultarOfertas(usuario: Usuario): OfertaPacote[]
-    +montarPreco(pacote: Pacote): Preco
+    +montarPreco(pacote: Pacote, comDesconto: boolean = true): Preco
+    +descontoPara(pacote: Pacote): number [0..1]
   }
 }
 
 package "Catálogo da plataforma" #F3E8FC {
   class catalogo <<módulo>> {
-    +MOEDAS_POR_REAL = 20
+    +MOEDAS_POR_REAL: number = 20
     +PACOTES: Pacote[]
     +CONFIGURACAO_PRECO: ConfiguracaoPreco
+    +REPASSE_POR_MOEDA: Dinheiro = R$ 0,02
   }
   class Pacote <<dataType>> {
     +id: string
@@ -40,10 +42,16 @@ package "Catálogo da plataforma" #F3E8FC {
     +taxaFixa: Dinheiro [0..1] {valor > 0}
     +aliquotaImposto: number [0..1] {valor > 0}
   }
+  class FaixaDesconto <<dataType>> {
+    +aPartirDe: Dinheiro
+    +percentual: number {0 < valor < 100}
+  }
   class OfertaPacote <<dataType>> {
     +pacote: Pacote
     +precoOriginal: Dinheiro
+    +precoSemDesconto: Dinheiro
     +precoPromocional: Dinheiro
+    +descontoPercentual: number [0..1]
     +composicao: string
   }
 }
@@ -107,6 +115,7 @@ ServicoRecarga -left-> "1" ConfiguracaoPreco : regras de preço
 ServicoRecarga .left.> OfertaPacote : <<create>>
 catalogo -down-> "1..*" Pacote
 catalogo -down-> "1" ConfiguracaoPreco
+ConfiguracaoPreco -down-> "0..*" FaixaDesconto : descontosProgressivos
 OfertaPacote -down-> "1" Pacote
 ComImposto .down.> Dinheiro
 
@@ -115,19 +124,27 @@ note right of ServicoRecarga
   <b>montarPreco</b> monta a cadeia em ordem fixa
   (desconto → taxa fixa → imposto, tudo em BRL);
   cada camada só entra se estiver na configuração.
+  <b>descontoPara</b> escolhe o percentual: a maior faixa
+  progressiva que o valor de tabela alcança ou, sem
+  faixa, o desconto geral. O Decorator não muda.
+  Com comDesconto = false, a mesma cadeia sai sem
+  ComDesconto: é o preço riscado do modal.
 end note
 
 note bottom of ComTaxaFixa
-  <b>Exemplo — pacote de 210 por R$ 10,00</b>
-  new ComImposto(new ComDesconto(new PrecoPacote(p10), 29), 5)
-  Preço original = PrecoPacote.calcular() = R$ 10,00
-  Preço promocional = cadeia completa.calcular() = R$ 7,46
-  descrever(): "pacote de 210 (R$ 10,00) → desconto de 29% → imposto de 5%"
+  <b>Exemplo — pacote de 210 por R$ 10,00 (faixa de 8%)</b>
+  new ComImposto(new ComDesconto(new PrecoPacote(p10), 8), 5)
+  precoOriginal = PrecoPacote.calcular() = R$ 10,00
+  precoSemDesconto = ComImposto(PrecoPacote) = R$ 10,50
+  precoPromocional = cadeia completa.calcular() = R$ 9,66
+  descrever(): "pacote de 210 (R$ 10,00) → desconto de 8% → imposto de 5%"
 end note
 
 note bottom of catalogo
   20 de moeda virtual por R$ 1, com bônus
   progressivo de 0% (R$ 5) a 40% (R$ 1000).
-  Promoção vigente: 29% de desconto e 5% de imposto.
+  Desconto progressivo: 5% (R$ 5) a 33% (R$ 1000);
+  5% de imposto. REPASSE_POR_MOEDA (F2) fica abaixo
+  do menor preço efetivo por moeda (R$ 0,0251).
 end note
 @enduml
