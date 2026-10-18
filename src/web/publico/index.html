@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transmissão ao vivo · SubEquipe_02</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+  <link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+  <header class="topo">
+    <strong class="marca">transmite</strong>
+    <div class="carteiras" aria-live="polite">
+      <span>Sua carteira: <b id="saldo-espectador">0</b> moedas</span>
+      <span>Repasse ao Criador: <b id="saldo-criador">R$ 0,00</b></span>
+    </div>
+    <button type="button" class="botao-discreto" id="reiniciar">Reiniciar demonstração</button>
+  </header>
+
+  <main class="estudio">
+    <section class="palco" aria-label="Transmissão">
+      <div class="player">
+        <span class="ao-vivo"><i aria-hidden="true"></i>Ao vivo</span>
+        <div class="player-info">
+          <span class="avatar" aria-hidden="true">C</span>
+          <div>
+            <p class="canal">Criador</p>
+            <p class="titulo-live">Noite de campeonato, rodada final</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="paineis">
+        <section class="painel" aria-labelledby="t-recarga">
+          <header class="painel-topo">
+            <h2 id="t-recarga">Comprar moeda virtual</h2>
+            <span class="frente">F1 Recarga</span>
+          </header>
+
+          <fieldset class="pacotes">
+            <legend>Pacote</legend>
+            <div id="lista-pacotes" class="lista-pacotes"></div>
+          </fieldset>
+
+          <fieldset class="meios">
+            <legend>Meio de pagamento</legend>
+            <div id="lista-meios"></div>
+          </fieldset>
+
+          <button type="button" class="botao" id="comprar">Comprar pacote</button>
+          <p class="erro" id="erro-recarga" role="alert" hidden></p>
+
+          <div class="pedidos" id="pedidos"></div>
+        </section>
+
+        <section class="painel" aria-labelledby="t-doacao">
+          <header class="painel-topo">
+            <h2 id="t-doacao">Doar com mensagem</h2>
+            <span class="frente">F2 Doação</span>
+          </header>
+
+          <label class="campo" for="canal">Canal
+            <select id="canal"></select>
+          </label>
+
+          <label class="campo" for="quantidade">Quantidade de moeda virtual
+            <input id="quantidade" type="number" min="200" step="50" value="2000" inputmode="numeric">
+          </label>
+          <p class="faixa-previa" id="faixa-previa"></p>
+
+          <label class="campo" for="mensagem">Mensagem
+            <textarea id="mensagem" rows="3">Que jogada! Mandando apoio pro canal.</textarea>
+          </label>
+          <p class="contador" id="contador"></p>
+
+          <button type="button" class="botao" id="doar">Doar</button>
+          <p class="erro" id="erro-doacao" role="alert" hidden></p>
+        </section>
+      </div>
+
+      <section class="registro" aria-labelledby="t-registro">
+        <h2 id="t-registro">Padrões em ação</h2>
+        <ol id="eventos" class="eventos"></ol>
+      </section>
+    </section>
+
+    <aside class="chat" aria-labelledby="t-chat">
+      <header class="chat-topo">
+        <h2 id="t-chat">Chat ao vivo</h2>
+        <span class="frente">F3 Mensagem destacada</span>
+      </header>
+      <div id="fixadas" class="fixadas"></div>
+      <ol id="mensagens" class="mensagens" aria-live="polite"></ol>
+    </aside>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
