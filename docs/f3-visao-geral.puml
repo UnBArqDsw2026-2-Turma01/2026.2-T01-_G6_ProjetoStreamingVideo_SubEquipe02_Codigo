@@ -14,9 +14,9 @@ skinparam nodesep 60
 skinparam ranksep 60
 
 ' ---------- Integração com a F2 ----------
-class ServicoDoacao <<F2>> {
+class MediatorDoacaoComMensagem <<F2>> {
   -notificadorChat: NotificadorChat
-  +processarDoacao(...): ResultadoDoacao
+  +processar(...): ResultadoDoacaoComMensagem
 }
 
 interface NotificadorChat <<interface>> <<contrato>> {
@@ -102,7 +102,7 @@ class ComLimiteCaracteres <<ConcreteDecorator>> {
 }
 
 ' ---------- Relações ----------
-ServicoDoacao -right-> "1" NotificadorChat : notificadorChat
+MediatorDoacaoComMensagem -right-> "1" NotificadorChat : notificadorChat
 NotificadorChat .right.> DoacaoNotificada : <<usa>>
 NotificadorChat <|.. Chat
 
