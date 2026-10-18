@@ -34,7 +34,7 @@ const rotas: Record<string, Rota> = {
   "GET /api/ofertas": () => sessao.ofertas(),
   "POST /api/meios/alternar": (c) => sessao.alternarMeio(texto(c.nome, "o meio de pagamento")),
   "POST /api/recargas": (c) => sessao.comprar(texto(c.pacoteId, "o pacote"), texto(c.meio, "o meio de pagamento")),
-  "POST /api/recargas/pagar": (c) => sessao.pagar(texto(c.recargaId, "o pedido")),
+  "POST /api/recargas/verificar": (c) => sessao.verificarPagamento(texto(c.recargaId, "o pedido")),
   "POST /api/recargas/reenviar-aviso": (c) => sessao.reenviarAviso(texto(c.recargaId, "o pedido")),
   "POST /api/doacoes": (c) =>
     sessao.doar(texto(c.canalId, "o canal"), Number(c.quantidade), typeof c.mensagem === "string" ? c.mensagem : ""),
@@ -97,6 +97,9 @@ const servidor = createServer(async (req, res) => {
   }
 });
 
-servidor.listen(PORTA, () => {
-  console.log(`Front-end da SubEquipe_02 rodando em http://localhost:${PORTA}`);
+void sessao.conectarProcessadoresReais().then((linhas) => {
+  linhas.forEach((linha) => console.log(linha));
+  servidor.listen(PORTA, () => {
+    console.log(`Front-end da SubEquipe_02 rodando em http://localhost:${PORTA}`);
+  });
 });

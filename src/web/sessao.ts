@@ -6,14 +6,17 @@ import {
   ErroMeioPagamentoIndisponivel,
   MetodoRecarga,
   ProcessadorSimulado,
+  StatusPagamento,
   assinarNotificacao,
   montarRecarga,
+  type GatewayPagamento,
   type NotificacaoPagamento,
   type Recarga,
   type RecargaController,
 } from "../f1-recarga";
 import { FaixaDestaque, montarDoacao, type DoacaoController } from "../f2-doacao";
 import { Chat } from "../f3-chat";
+import { PROCESSADORES_REAIS } from "../demo/processadoresReais";
 
 /** Mensagem como a página exibe no chat: comum (escrita no chat) ou destacada (vinda de uma doação). */
 export type MensagemNoChat =
@@ -36,17 +39,22 @@ const LIMITE_MENSAGEM_COMUM = 200;
 /** Erro de regra de negócio ou de meio de pagamento que a página mostra ao usuário. */
 export class ErroDaAcao extends Error {}
 
-interface MeioSimulado {
-  readonly processador: ProcessadorSimulado;
+/** Meio de pagamento da página: um gateway da F1 e o segredo com que os avisos dele são assinados. */
+interface MeioPagamento {
+  readonly gateway: GatewayPagamento;
   readonly segredo: string;
+  /** Só nos simulados: o processador em memória, para tirar do ar e simular o pagamento. */
+  readonly simulador?: ProcessadorSimulado;
+  /** Só nos reais: como pagar no checkout de teste. */
+  readonly comoPagar?: string;
 }
 
 /**
  * Estado da demonstração web: as três frentes montadas com o mesmo código das
  * demos de terminal, ligadas entre si, em memória.
  *
- * O pagamento usa processadores simulados da F1, porque os reais precisam de
- * credenciais e de uma URL pública para receber o aviso de pagamento.
+ * Meios de pagamento: Mercado Pago e Stripe reais (modo de teste), quando o .env
+ * tem as credenciais, e dois processadores simulados, que funcionam em qualquer máquina.
  */
 export class SessaoDemo {
   private espectador!: Usuario;
@@ -55,7 +63,9 @@ export class SessaoDemo {
   private recargas!: RecargaController;
   private doacoes!: DoacaoController;
   private chat!: Chat;
-  private meios!: Map<string, MeioSimulado>;
+  private meios!: Map<string, MeioPagamento>;
+  /** Gateways reais conectados na subida do servidor; continuam valendo depois de reiniciar. */
+  private reais: MeioPagamento[] = [];
   private pedidos!: Map<string, Recarga>;
   private mensagens!: MensagemNoChat[];
   private ultimoAviso!: Map<string, string>;
@@ -77,13 +87,13 @@ export class SessaoDemo {
     const financeiro = new ServicoFinanceiro();
     const geradorId = new GeradorId();
 
-    this.meios = new Map([
-      ["Simulado-A", { processador: new ProcessadorSimulado(), segredo: "segredo-a" }],
-      ["Simulado-B", { processador: new ProcessadorSimulado(), segredo: "segredo-b" }],
-    ]);
-    const gateways = [...this.meios].map(
-      ([nome, meio]) => new AdaptadorProcessadorSimulado(meio.processador, meio.segredo, nome),
-    );
+    const simulados = ["Simulado-A", "Simulado-B"].map((nome, i): MeioPagamento => {
+      const simulador = new ProcessadorSimulado();
+      const segredo = `segredo-simulado-${i + 1}`;
+      return { gateway: new AdaptadorProcessadorSimulado(simulador, segredo, nome), segredo, simulador };
+    });
+    this.meios = new Map([...this.reais, ...simulados].map((meio) => [meio.gateway.nome, meio]));
+    const gateways = [...this.meios.values()].map((meio) => meio.gateway);
 
     this.recargas = montarRecarga({ gateways, financeiro, usuarios, geradorId }).controller;
 
@@ -96,6 +106,30 @@ export class SessaoDemo {
     this.mensagens = [];
   }
 
+  /**
+   * Conecta o Mercado Pago e o Stripe reais, se o .env tiver credenciais de teste.
+   * Devolve uma linha por processador, para o servidor mostrar no terminal.
+   */
+  async conectarProcessadoresReais(): Promise<string[]> {
+    const linhas: string[] = [];
+    this.reais = [];
+    for (const processador of Object.values(PROCESSADORES_REAIS)) {
+      try {
+        const conexao = await processador.conectar();
+        if ("erro" in conexao) {
+          linhas.push(`${processador.titulo}: não usado (${conexao.erro})`);
+          continue;
+        }
+        this.reais.push({ gateway: conexao.gateway, segredo: conexao.segredoWebhook, comoPagar: conexao.comoPagar });
+        linhas.push(`${processador.titulo}: conectado (${conexao.descricao})`);
+      } catch (erro) {
+        linhas.push(`${processador.titulo}: não foi possível conectar (${erro instanceof Error ? erro.message : erro})`);
+      }
+    }
+    this.reiniciar();
+    return linhas;
+  }
+
   estado() {
     return {
       espectador: { nome: this.espectador.nome, moedas: this.espectador.carteira.saldoMoedaVirtual },
@@ -105,15 +139,25 @@ export class SessaoDemo {
         monetizado: canal.perfil.estaHabilitadoAReceber(),
         saldo: canal.carteira.saldoDinheiro.formatar(),
       })),
-      meios: [...this.meios].map(([nome, meio]) => ({ nome, online: meio.processador.online })),
-      pedidos: [...this.pedidos.values()].reverse().map((r) => ({
-        id: r.id,
-        moedas: r.quantidadeMoedaVirtual,
-        valor: r.valor.formatar(),
-        meio: r.gatewayUtilizado ?? "",
-        status: r.status,
-        aviso: this.ultimoAviso.get(r.id) ?? "",
+      meios: [...this.meios].map(([nome, meio]) => ({
+        nome,
+        real: !meio.simulador,
+        online: meio.simulador?.online ?? true,
       })),
+      pedidos: [...this.pedidos.values()].reverse().map((r) => {
+        const meio = r.gatewayUtilizado ? this.meios.get(r.gatewayUtilizado) : undefined;
+        return {
+          id: r.id,
+          moedas: r.quantidadeMoedaVirtual,
+          valor: r.valor.formatar(),
+          meio: r.gatewayUtilizado ?? "",
+          status: r.status,
+          real: Boolean(meio && !meio.simulador),
+          link: meio && !meio.simulador ? (r.instrucoesPagamento ?? "") : "",
+          comoPagar: meio?.comoPagar ?? "",
+          aviso: this.ultimoAviso.get(r.id) ?? "",
+        };
+      }),
       faixas: [FaixaDestaque.FAIXA_1, FaixaDestaque.FAIXA_2, FaixaDestaque.FAIXA_3, FaixaDestaque.FAIXA_4, FaixaDestaque.FAIXA_5],
       mensagens: this.mensagens,
       agora: Date.now(),
@@ -130,10 +174,11 @@ export class SessaoDemo {
     }));
   }
 
+  /** Tira do ar (ou volta) um processador simulado, para mostrar o Adapter avisando que o meio caiu. */
   alternarMeio(nome: string): void {
-    const meio = this.meios.get(nome);
-    if (!meio) throw new ErroDaAcao(`Meio de pagamento desconhecido: ${nome}`);
-    meio.processador.online = !meio.processador.online;
+    const simulador = this.meios.get(nome)?.simulador;
+    if (!simulador) throw new ErroDaAcao(`Só os meios simulados podem ser tirados do ar: ${nome}`);
+    simulador.online = !simulador.online;
   }
 
   /** Cria o pedido de recarga: preço pela cadeia de decoradores e checkout pelo adaptador do meio escolhido. */
@@ -152,11 +197,31 @@ export class SessaoDemo {
     }
   }
 
-  /** Simula o espectador pagando no processador; o aviso de pagamento passa pelo Proxy. */
-  async pagar(recargaId: string): Promise<void> {
+  /**
+   * Consulta o pagamento no processador e, se aprovado, envia o aviso assinado pelo Proxy.
+   * Nos simulados, antes aprova o pagamento, como se o espectador tivesse pago.
+   * Nos reais, o espectador paga no link do checkout; como o processador não alcança
+   * o localhost para chamar o webhook, o aviso é montado aqui, igual ao demo interativo da F1.
+   */
+  async verificarPagamento(recargaId: string): Promise<void> {
     const { recarga, meio } = this.pedido(recargaId);
-    meio.processador.aprovar(recarga.idCheckout!);
-    await this.avisar(recarga, meio.segredo, "Aviso de pagamento");
+    meio.simulador?.aprovar(recarga.idCheckout!);
+    let situacao;
+    try {
+      situacao = await meio.gateway.consultarPagamento(recarga.idCheckout!);
+    } catch (erro) {
+      throw new ErroDaAcao(`Não foi possível consultar o ${meio.gateway.nome}: ${erro instanceof Error ? erro.message : erro}`);
+    }
+    if (situacao.status === StatusPagamento.APROVADO) {
+      await this.avisar(recarga, meio.segredo, "Aviso de pagamento");
+      return;
+    }
+    this.ultimoAviso.set(
+      recarga.id,
+      situacao.status === StatusPagamento.RECUSADO
+        ? `Pagamento recusado pelo ${meio.gateway.nome}.`
+        : `Pagamento ainda não feito no ${meio.gateway.nome}.`,
+    );
   }
 
   /** Reenvia um aviso legítimo do mesmo pagamento, como o processador faz quando não recebe resposta (O11). */
@@ -212,7 +277,7 @@ export class SessaoDemo {
     this.ultimoAviso.set(recarga.id, `${descricao}: ${resultado.efeito} (${resultado.motivo})`);
   }
 
-  private pedido(recargaId: string): { recarga: Recarga; meio: MeioSimulado } {
+  private pedido(recargaId: string): { recarga: Recarga; meio: MeioPagamento } {
     const recarga = this.pedidos.get(recargaId);
     const meio = recarga?.gatewayUtilizado ? this.meios.get(recarga.gatewayUtilizado) : undefined;
     if (!recarga || !meio || !recarga.idCheckout) throw new ErroDaAcao(`Pedido de recarga inexistente: ${recargaId}`);

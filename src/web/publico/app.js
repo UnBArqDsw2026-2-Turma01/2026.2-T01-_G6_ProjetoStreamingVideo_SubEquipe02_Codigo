@@ -66,7 +66,7 @@ function renderizarMeios(meios) {
   const escolhido = $("meio").value || meios[0].nome;
   $("meio").replaceChildren(...meios.map((m) => el("option", { value: m.nome, selected: m.nome === escolhido }, m.nome)));
   $("fora-do-ar").replaceChildren(
-    ...meios.map((m) =>
+    ...meios.filter((m) => !m.real).map((m) =>
       el(
         "label",
         {},
@@ -87,11 +87,17 @@ function renderizarPedidos(pedidos) {
       const corpo = { recargaId: p.id };
       const botao = (rotulo, caminho) =>
         el("button", { type: "button", onclick: () => agir("erro-recarga", "POST", caminho, corpo) }, rotulo);
+      const pendente = p.status === "PENDENTE";
       return el(
         "div",
         { class: "pedido" },
         el("p", {}, `${p.id}: ${p.moedas} moedas por ${p.valor} no ${p.meio} (${p.status})`),
-        p.status === "PENDENTE" ? botao("Pagar", "/api/recargas/pagar") : botao("Reenviar aviso", "/api/recargas/reenviar-aviso"),
+        pendente && p.link
+          ? el("p", {}, el("a", { href: p.link, target: "_blank", rel: "noopener" }, "Abrir checkout"), ` (${p.comoPagar})`)
+          : null,
+        pendente && !p.real ? botao("Pagar", "/api/recargas/verificar") : null,
+        pendente && p.real ? botao("Verificar pagamento", "/api/recargas/verificar") : null,
+        p.status === "CONCLUIDA" ? botao("Reenviar aviso", "/api/recargas/reenviar-aviso") : null,
         p.aviso ? el("p", { class: "nota" }, p.aviso) : null,
       );
     }),

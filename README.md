@@ -249,7 +249,12 @@ A mesma história em uma página web, servida por um servidor HTTP mínimo (`src
 | Doação (F2) | Facade com Mediator, com as regras de canal monetizado, saldo e limite de caracteres. |
 | Chat (F3) | Mensagem destacada montada pelo Decorator: a página pinta a mensagem com a cor devolvida por `ComFaixaCor` e a mantém fixada no topo do chat pelo tempo de `ComFixacao`; `ComLimiteCaracteres` recusa a mensagem acima do limite. Também dá para escrever mensagens comuns. |
 
-O pagamento usa os processadores simulados da F1 ("Simulado-A" e "Simulado-B"), porque os reais precisam de credenciais e de uma URL pública para o aviso de pagamento. O estado fica em memória e é o mesmo para todas as abas; use "Reiniciar" para começar do zero.
+Meios de pagamento:
+
+- **Mercado Pago e Stripe reais (modo de teste):** aparecem quando o `.env` tem as credenciais (ver [Configurando as APIs de pagamento](#configurando-as-apis-de-pagamento-modo-de-teste)). Ao comprar, a página mostra o link do checkout; pague nele com o comprador de teste ou o cartão de teste e clique em "Verificar pagamento". Como o processador não alcança o `localhost` para chamar o webhook, a página consulta o pagamento e, se aprovado, monta o aviso assinado, que passa pelo Proxy (o mesmo que o `demo:interativo` faz).
+- **Simulado-A e Simulado-B:** funcionam sem credenciais. "Pagar" simula o pagamento, e "Fora do ar" tira o meio do ar para mostrar o Adapter avisando e sugerindo outro meio.
+
+Ao subir, o servidor diz no terminal quais processadores reais conectou. O estado fica em memória e é o mesmo para todas as abas; use "Reiniciar" para começar do zero.
 
 ---
 
