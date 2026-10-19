@@ -74,6 +74,13 @@ const servidor = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const rota = rotas[`${req.method} ${url.pathname}`];
 
+  // Retorno do checkout real (success_url do Stripe): volta para a página, que credita sozinha.
+  if (url.pathname === "/recarga/concluida") {
+    res.writeHead(302, { Location: "/" });
+    res.end();
+    return;
+  }
+
   if (!url.pathname.startsWith("/api/")) {
     await servirArquivo(url.pathname, res);
     return;
